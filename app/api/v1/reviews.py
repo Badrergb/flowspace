@@ -8,7 +8,7 @@ from app.db.database import get_db
 from app.models.reviews import Review
 from app.schemas.reviews import ReviewResponse
 from app.core.rate_limit import limiter
-from app.services.storage_service import upload_file_to_r2
+from app.services.storage_service import upload_file_to_supabase
 from app.core.errors import safe_error_message
 from app.core.config import settings
 
@@ -34,9 +34,8 @@ async def create_review(
         file_ext = avatar.filename.split('.')[-1] if avatar.filename else 'png'
         file_path = f"reviews/avatars/{uuid.uuid4()}.{file_ext}"
         try:
-            # We assume a generic bucket name or pass the default one here
-            # Since the bucket is set via R2 config, we'll pass a bucket name string.
-            avatar_url = upload_file_to_r2(settings.R2_BUCKET_NAME or "flowspace-public", file_path, file_bytes, avatar.content_type or "image/png")
+            # Upload to the flowspace-media bucket
+            avatar_url = upload_file_to_supabase("flowspace-media", file_path, file_bytes, avatar.content_type or "image/png")
         except Exception as e:
             safe_msg = safe_error_message(e, fallback="Failed to upload avatar")
             raise HTTPException(status_code=500, detail=safe_msg)

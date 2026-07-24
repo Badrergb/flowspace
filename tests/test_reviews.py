@@ -27,10 +27,10 @@ def test_create_review_success(client, test_db):
     assert db_review is not None
     assert db_review.is_approved is False
 
-@patch('app.api.v1.reviews.upload_file_to_r2')
+@patch('app.api.v1.reviews.upload_file_to_supabase')
 def test_create_review_with_avatar(mock_upload, client, test_db):
-    # Mock the R2 upload to just return the constructed public URL we expect
-    mock_upload.return_value = f"{settings.R2_PUBLIC_URL_BASE}/reviews/avatars/mocked-uuid.png"
+    # Mock the Supabase upload to just return a constructed public URL we expect
+    mock_upload.return_value = "https://mock.supabase.co/storage/v1/object/public/flowspace-media/reviews/avatars/mocked-uuid.png"
     
     # Send a file to test the avatar upload logic
     response = client.post(
@@ -46,7 +46,7 @@ def test_create_review_with_avatar(mock_upload, client, test_db):
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "Eve"
-    assert data["avatar_url"] == f"{settings.R2_PUBLIC_URL_BASE}/reviews/avatars/mocked-uuid.png"
+    assert data["avatar_url"] == "https://mock.supabase.co/storage/v1/object/public/flowspace-media/reviews/avatars/mocked-uuid.png"
     
     # Ensure the mock was actually called
     mock_upload.assert_called_once()
