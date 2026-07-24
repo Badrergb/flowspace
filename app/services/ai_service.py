@@ -4,7 +4,7 @@ import logging
 from sqlalchemy.orm import Session
 from app.models.entities import Transaction, Task, Habit, HabitLog, Journal, UserSettings
 from app.core.config import settings
-from datetime import date
+from datetime import date, datetime, timedelta
 from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
@@ -84,8 +84,30 @@ def generate_weekly_review(db: Session, user_id) -> str:
         
     check_and_increment_quota(db, user_id)
         
-    # Gather context (mocked out for brevity, would query DB for last 7 days of tasks, habits, etc.)
-    prompt = "Based on the user's activity this week, write a short, encouraging 2-sentence summary of their productivity."
+    # Gather context: Get tasks completed in the last 7 days
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    
+    completed_tasks = db.query(Task).filter(
+        Task.user_id == user_id, 
+        Task.is_completed == True,
+        Task.updated_at >= seven_days_ago
+    ).all()
+    
+    completed_habits = db.query(HabitLog).join(Habit).filter(
+        Habit.user_id == user_id,
+        HabitLog.completed_at >= seven_days_ago
+    ).all()
+    
+    task_count = len(completed_tasks)
+    habit_count = len(completed_habits)
+    
+    task_titles = [t.title for t in completed_tasks[:5]] # sample up to 5 tasks
+    
+    context_str = f"This week, the user completed {task_count} tasks and logged {habit_count} habit completions."
+    if task_titles:
+        context_str += f" Some tasks they finished: {', '.join(task_titles)}."
+
+    prompt = f"Based on the user's activity: '{context_str}', write a short, highly encouraging 2-sentence summary of their productivity this week."
     
     try:
         response = ai_client.chat.completions.create(
