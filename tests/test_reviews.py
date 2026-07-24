@@ -1,6 +1,8 @@
 import pytest
 import uuid
 from app.models.reviews import Review
+from unittest.mock import patch
+from app.core.config import settings
 
 def test_create_review_success(client, test_db):
     response = client.post(
@@ -24,6 +26,35 @@ def test_create_review_success(client, test_db):
     db_review = test_db.query(Review).filter(Review.id == review_id).first()
     assert db_review is not None
     assert db_review.is_approved is False
+
+@patch('app.api.v1.reviews.upload_file_to_r2')
+def test_create_review_with_avatar(mock_upload, client, test_db):
+    # Mock the R2 upload to just return the constructed public URL we expect
+    mock_upload.return_value = f"{settings.R2_PUBLIC_URL_BASE}/reviews/avatars/mocked-uuid.png"
+    
+    # Send a file to test the avatar upload logic
+    response = client.post(
+        "/api/v1/reviews",
+        data={
+            "name": "Eve",
+            "rating": 4,
+            "review_text": "Good stuff with avatar!"
+        },
+        files={"avatar": ("avatar.png", b"fake image content", "image/png")}
+    )
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["name"] == "Eve"
+    assert data["avatar_url"] == f"{settings.R2_PUBLIC_URL_BASE}/reviews/avatars/mocked-uuid.png"
+    
+    # Ensure the mock was actually called
+    mock_upload.assert_called_once()
+    
+    # Verify DB
+    review_id = uuid.UUID(data["id"])
+    db_review = test_db.query(Review).filter(Review.id == review_id).first()
+    assert db_review.avatar_url == data["avatar_url"]
 
 def test_create_review_invalid_rating(client):
     response = client.post(
