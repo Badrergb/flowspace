@@ -7,9 +7,19 @@ from app.api.v1 import auth, sync, backup, entities, social, media, devices, ai,
 from app.core.rate_limit import setup_rate_limiting
 import logging
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Recommend narrowing this down in production!
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 setup_rate_limiting(app)
