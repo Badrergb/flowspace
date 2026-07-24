@@ -6,6 +6,9 @@ from app.db.database import engine
 from app.api.v1 import auth, sync, backup, entities, social, media, devices, ai, user, reviews
 from app.core.rate_limit import setup_rate_limiting
 import logging
+import json
+import firebase_admin
+from firebase_admin import credentials
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,6 +16,15 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.0.0",
 )
+
+if settings.FIREBASE_CREDENTIALS_JSON:
+    try:
+        cred_dict = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred)
+        logging.info("Firebase Admin initialized successfully.")
+    except Exception as e:
+        logging.error(f"Failed to initialize Firebase Admin: {e}")
 
 app.add_middleware(
     CORSMiddleware,

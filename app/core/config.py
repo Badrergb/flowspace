@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = "mock-key"
     SUPABASE_SERVICE_ROLE_KEY: str = "mock-key"
 
+    FIREBASE_CREDENTIALS_JSON: str = ""
+
     AI_DAILY_REQUEST_LIMIT: int = 10
 
     SECRET_KEY: str = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
