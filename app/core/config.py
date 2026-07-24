@@ -1,0 +1,34 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "FlowSpace Backend"
+
+    DATABASE_URL: str = "sqlite:///./test.db"
+    DIRECT_URL: str = "sqlite:///./test.db"
+
+    SUPABASE_URL: str = "https://mock.supabase.co"
+    SUPABASE_ANON_KEY: str = "mock-key"
+    SUPABASE_SERVICE_ROLE_KEY: str = "mock-key"
+
+    R2_ACCESS_KEY_ID: str = "mock-key"
+    R2_SECRET_ACCESS_KEY: str = "mock-key"
+    R2_ENDPOINT_URL: str = "https://mock.r2.cloudflarestorage.com"
+    R2_BUCKET_NAME: str = "mock-bucket"
+    R2_PUBLIC_URL_BASE: str = "https://mock.r2.dev"
+
+    AI_DAILY_REQUEST_LIMIT: int = 10
+
+    SECRET_KEY: str = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+    ALGORITHM: str = "HS256"
+
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",
+    )
+
+
+settings = Settings()
