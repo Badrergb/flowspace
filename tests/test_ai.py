@@ -43,3 +43,28 @@ def test_chat(auth_client, monkeypatch):
     res = auth_client.post("/api/v1/ai/chat", json=payload)
     assert res.status_code == 200
     assert res.json()["response"] == "Mock AI response"
+
+def test_ai_quota_exceeded(auth_client, test_db, test_user_and_token, monkeypatch):
+    monkeypatch.setattr("app.services.ai_service._get_client", lambda: MockAIClient())
+    user, _, _ = test_user_and_token
+    from app.models.entities import UserSettings
+    
+    # Set quota to just below limit
+    settings = test_db.query(UserSettings).filter(UserSettings.user_id == user.id).first()
+    if not settings:
+        import uuid
+        settings = UserSettings(id=uuid.uuid4(), user_id=user.id, version=1)
+        test_db.add(settings)
+    
+    settings.ai_requests_used = 9
+    test_db.commit()
+    
+    payload = {"query": "Hello"}
+    # 10th request (should succeed)
+    res = auth_client.post("/api/v1/ai/chat", json=payload)
+    assert res.status_code == 200
+    
+    # 11th request (should fail)
+    res = auth_client.post("/api/v1/ai/chat", json=payload)
+    assert res.status_code == 429
+    assert "limit reached" in res.json()["detail"].lower()

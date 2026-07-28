@@ -122,7 +122,10 @@ class SyncService:
             if op.operation_type == "create":
                 if existing_row:
                     # Treat as update if it exists (Upsert logic)
-                    if current_version > existing_row.version:
+                    client_version = op.payload.get('version') if op.payload else None
+                    if client_version is not None and client_version < existing_row.version:
+                        logger.warning(f"Stale create (upsert) for {op.entity_type} {op.entity_id}. Skipping.")
+                    else:
                         for k, v in op.payload.items():
                             if hasattr(existing_row, k) and k not in ['id', 'user_id']:
                                 setattr(existing_row, k, v)
@@ -140,7 +143,10 @@ class SyncService:
 
             elif op.operation_type == "update":
                 if existing_row:
-                    if current_version > existing_row.version:
+                    client_version = op.payload.get('version') if op.payload else None
+                    if client_version is not None and client_version < existing_row.version:
+                        logger.warning(f"Stale update for {op.entity_type} {op.entity_id}. Skipping.")
+                    else:
                         for k, v in op.payload.items():
                             if hasattr(existing_row, k) and k not in ['id', 'user_id']:
                                 setattr(existing_row, k, v)
@@ -150,7 +156,10 @@ class SyncService:
                     
             elif op.operation_type == "delete":
                 if existing_row:
-                    if current_version > existing_row.version:
+                    client_version = op.payload.get('version') if op.payload else None
+                    if client_version is not None and client_version < existing_row.version:
+                        logger.warning(f"Stale delete for {op.entity_type} {op.entity_id}. Skipping.")
+                    else:
                         # Soft delete
                         existing_row.deleted_at = func.now()
                         existing_row.version = current_version

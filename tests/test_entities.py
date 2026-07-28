@@ -81,3 +81,41 @@ def test_get_child_entities(auth_client, test_db, test_user_and_token):
     test_db.delete(session)
     test_db.delete(habit)
     test_db.commit()
+
+def test_finance_numeric_precision(auth_client, test_db, test_user_and_token):
+    user, _, _ = test_user_and_token
+    from app.models.entities import Transaction
+    import decimal
+    
+    # We create a transaction with an amount of 19.99
+    # If it were a float, it might drift to 19.990000000000002
+    amount = decimal.Decimal('19.99')
+    
+    import datetime
+    tx = Transaction(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        amount=amount,
+        type="expense",
+        note="Food",
+        date=datetime.datetime.utcnow(),
+        version=int(time.time_ns())
+    )
+    test_db.add(tx)
+    test_db.commit()
+    
+    # Now retrieve it
+    test_db.refresh(tx)
+    assert tx.amount == amount # Exactly 19.99
+    assert isinstance(tx.amount, decimal.Decimal)
+    
+    # Check the API returns it cleanly
+    res = auth_client.get("/api/v1/entities/transactions")
+    assert res.status_code == 200
+    data = res.json()
+    
+    found = next((t for t in data if t["id"] == str(tx.id)), None)
+    assert found is not None
+    # Verify it serialize to 19.99 (or 19.99 float cleanly, but mostly that it doesn't drift)
+    # Fastapi will encode Decimal to float/string depending on config, but it should equal 19.99
+    assert float(found["amount"]) == 19.99

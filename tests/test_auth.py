@@ -56,3 +56,37 @@ def test_refresh_token(client, test_user_and_token):
     data = response.json()
     assert "access_token" in data
     assert "refresh_token" in data
+
+def test_register_rate_limit(client):
+    import uuid
+    # Limit is 5/minute
+    for i in range(5):
+        email = f"test_{uuid.uuid4()}@example.com"
+        client.post(
+            "/api/v1/auth/register",
+            json={"email": email, "password": "password123", "full_name": "Test User"}
+        )
+    
+    # 6th attempt should be rate limited
+    email = f"test_{uuid.uuid4()}@example.com"
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "password123", "full_name": "Test User"}
+    )
+    assert response.status_code == 429
+
+def test_login_rate_limit(client, test_user_and_token):
+    user, _, _ = test_user_and_token
+    # Limit is 10/minute
+    for i in range(10):
+        client.post(
+            "/api/v1/auth/login",
+            data={"username": user.email, "password": "wrongpassword"}
+        )
+        
+    # 11th attempt should be rate limited
+    response = client.post(
+        "/api/v1/auth/login",
+        data={"username": user.email, "password": "testpassword123"}
+    )
+    assert response.status_code == 429

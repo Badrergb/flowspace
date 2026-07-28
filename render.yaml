@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: flowspace-backend
+    env: docker
+    plan: free # Can be changed to starter/standard depending on needs
+    region: ohio
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false

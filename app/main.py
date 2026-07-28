@@ -12,6 +12,12 @@ from firebase_admin import credentials
 
 from fastapi.middleware.cors import CORSMiddleware
 
+# Basic logging setup for production visibility
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.0.0",
@@ -28,7 +34,7 @@ if settings.FIREBASE_CREDENTIALS_JSON:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Recommend narrowing this down in production!
+    allow_origins=[origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

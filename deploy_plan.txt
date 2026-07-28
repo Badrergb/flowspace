@@ -1,0 +1,87 @@
+FlowSpace Backend — Test & Deploy Plan
+Everything to verify, every test case to run, then how to deploy
+Work through this in order: Part 1 confirms configuration is correct, Part 2 is the actual test cases (run these for real, don’t just read them), Part 3 is pre-deployment, Part 4 is the deployment steps themselves, Part 5 is what to check immediately after going live.
+
+Environment & Secrets
+All secrets (DATABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SECRET_KEY, GROQ_API_KEY, R2 credentials) are set as real environment variables on the server — never hardcoded.
+Rotate every credential one final time before going live, given the repeated accidental leaks earlier in this project.
+.env is in .gitignore and confirmed NOT present in the actual deployed build/zip (use git archive, not a raw folder zip).
+SECRET_KEY is a long, random, unique value — not a placeholder or reused from testing.
+Database
+alembic upgrade head runs cleanly on a fresh database with no errors.
+All tables exist: users, devices, tasks, notes, habits, habit_logs, goals, goal_progress, journals, calendar_events, reminders, categories, water_logs, workout_sessions, workout_sets, transactions, user_settings, sync_operations, reviews, plus social/friend tables.
+Every table that should have a version column (per the sync engine) has one.
+Third-Party Services
+Supabase project is on the correct plan/region, Postgres connection tested from the deployed server (not just locally).
+Cloudflare R2 bucket exists, credentials work, and a public URL method is configured (custom domain or r2.dev) — this was flagged as broken before, confirm it’s fixed.
+Groq API key is active and a real (non-mock) request succeeds.
+FCM/APNs credentials are in place if push notifications are being tested this round.
+
+Auth
+Sign up with a new email → user created, tokens returned.
+Log in with correct credentials → access + refresh tokens returned.
+Log in with wrong password → clean 401, no internal detail leaked.
+Hit /login 11 times in a minute → rate limit kicks in on the 11th (10/min limit).
+Hit /register 6 times in an hour from one IP → rate limit kicks in (5/min limit).
+Use a valid refresh token on /auth/refresh → new access token issued, refresh token rotates.
+Use an expired or malformed refresh token → clean rejection, not a server error.
+Sync Engine — the most important section, do not skip any of these
+Create a task offline (simulate), sync it → row appears correctly in the tasks table.
+Update an existing task, sync it → change is reflected, version increments.
+Delete a task, sync it → deleted_at is set (soft delete), row is not physically removed.
+CRITICAL: send a create + an update for the SAME entity_id in one single upload batch → confirm BOTH operations apply, not just the first (this was a real bug found and fixed — re-verify it stays fixed).
+Send the exact same operation twice (same operation_id) → second one is a no-op, not applied again (idempotency).
+Send an update with an OLDER version than what’s already stored → confirm it’s rejected, newer data is not overwritten (conflict resolution).
+Send a stale delete after a newer update → confirm the delete does NOT resurrect/override the newer state.
+Send a create for an entity_id that already exists (simulating a retried create) → confirm no duplicate-key crash, upsert handles it.
+Call /sync/download after another device made changes → confirm only the missing operations come back, not the full history every time.
+Attempt to sync an entity_id belonging to a DIFFERENT user → confirm it’s rejected (ownership scoping).
+Entity GET Endpoints
+GET each top-level entity endpoint (tasks, habits, calendar events, water logs, workouts, transactions) → returns only the logged-in user’s data, paginated, soft-deleted rows excluded.
+GET child entity endpoints (habit-logs, goal-progress, workout-sets) → correctly scoped through the parent, not crashing.
+Finance
+Add an expense and an income transaction → both save with correct type, Numeric precision holds (no floating-point rounding errors on amounts like 19.99).
+Edit and delete a transaction → both work, deleted one disappears from the list.
+Backup
+Create a backup → confirm the encrypted file actually appears in R2/Supabase Storage, not just a success message with nothing uploaded.
+Restore a backup → confirm it downloads, decrypts, and correctly matches the original data (encrypt-then-decrypt round trip, not just encryption alone).
+Call /backup/list → confirm it returns the real list of backups, not a hardcoded empty array.
+Attempt to restore another user’s backup path → confirm it’s rejected.
+AI Features
+Call the categorize/weekly-review/chat endpoints with AI features enabled → real Groq response returned.
+Turn ai_features_enabled off in Settings → confirm the backend actually skips the Groq call, not just hides a button client-side.
+Use up all 10 daily requests → 11th request returns a clean 429 with a clear message, not a crash.
+Wait for the daily reset (or manually adjust the date for testing) → confirm the quota resets correctly.
+Reviews (Landing Page Feature)
+Submit a review → saved with is_approved = false, does NOT appear in the public GET.
+Manually flip is_approved to true in Supabase → review now appears in GET, in the correct order.
+Hit the public POST endpoint 4 times in an hour from one IP → 4th is rate-limited.
+Upload an avatar with a review → confirm the resulting URL actually loads as an image in a browser (this was the flagged R2 public-URL bug — confirm it’s genuinely fixed, not just code-complete).
+Media / R2 Storage (general)
+Upload a profile avatar → confirm the returned URL loads directly in a browser with no auth headers.
+Confirm old Supabase Storage references are fully gone — no leftover code path still trying to use it.
+Security & Error Handling
+Trigger a deliberate DB failure on /health → confirms generic message returned, real error only in server logs.
+Trigger an error on backup/create and on avatar upload → confirm no raw exception string (str(e)) leaks in the response to the client.
+Confirm no endpoint returns a user’s hashed password or any secret value in any response.
+
+Remove/disable any debug mode, verbose error responses, or test-only endpoints.
+CORS is configured to only allow your actual app’s origin(s), not a wildcard "*".
+Confirm the monthly spend cap is set on Groq (safety net) and any relevant cap on Supabase/R2 billing alerts.
+Confirm database backups (the provider’s own, e.g. Supabase’s automatic backups) are enabled — separate from your app’s own user-facing backup feature.
+Run the full test suite (tests/) one final time against a clean, freshly-migrated database.
+Confirm logging is in place server-side so you can actually see errors after deployment, not flying blind.
+
+Choose a host for FastAPI (e.g. Railway, Render, Fly.io, or a VPS) — pick one with simple environment-variable management and HTTPS by default.
+Set every environment variable on the host’s dashboard/config — never upload the .env file itself.
+Point DATABASE_URL/DIRECT_URL at the production Supabase project (confirm it’s not still pointing at a dev/test database).
+Run alembic upgrade head against the production database as part of the deploy step.
+Deploy, then hit /health from the public URL → confirm it responds correctly over HTTPS.
+Run a smoke test: sign up a real test account, create a task, sync it, confirm it persists — the full loop, on the live deployed backend, not localhost.
+
+Watch server logs for the first real usage — confirm no unexpected errors from real device traffic (different from your test requests).
+Confirm rate limits are actually engaging under real conditions, not just in isolated tests.
+Confirm the Groq monthly spend cap and any Supabase/R2 alerts are actually active, not just configured and forgotten.
+Keep the credential-rotation habit going — if any secret is ever exposed again (zip, screenshot, pasted log), rotate immediately rather than assuming it’s fine.
+
+Once every checkbox above is genuinely checked — not assumed — the backend is ready to build the Flutter client against with confidence.

@@ -57,18 +57,7 @@ def test_lww_conflict_resolution(auth_client, test_db, test_user_and_token):
     test_db.add(task)
     test_db.commit()
     
-    # Attempt to update with a lower version (should be ignored by LWW)
-    # Wait, the server assigns the version during /upload, so it will ALWAYS be higher than the initial_version
-    # if we just call the endpoint. 
-    # To properly test LWW where an incoming operation has an older timestamp, we'd need the client to provide the timestamp, 
-    # BUT our spec says "server-assigned timestamp". Wait, if the server assigns the timestamp at upload time, 
-    # how does a conflict happen? 
-    # If device A goes offline, edits at T1. Device B goes offline, edits at T2.
-    # Device A comes online, uploads at T3 (gets version T3).
-    # Device B comes online, uploads at T4 (gets version T4).
-    # The server applies both in order of arrival, so T4 overwrites T3. This is true Last-Write(to server)-Wins.
-    # The test should just verify that a normal update works, since the server dictates the timeline.
-    
+    # Attempt to update with a lower version explicitly provided in payload
     op_id = str(uuid.uuid4())
     payload = {
         "device_id": str(device.id),
@@ -79,7 +68,8 @@ def test_lww_conflict_resolution(auth_client, test_db, test_user_and_token):
                 "entity_id": entity_id,
                 "operation_type": "update",
                 "payload": {
-                    "title": "Updated Title"
+                    "title": "Stale Update",
+                    "version": initial_version - 1000 # explicitly older
                 }
             }
         ]
@@ -89,7 +79,7 @@ def test_lww_conflict_resolution(auth_client, test_db, test_user_and_token):
     assert response.status_code == 200
     
     test_db.refresh(task)
-    assert task.title == "Updated Title"
+    assert task.title == "Initial" # Should NOT have been overwritten
 
 def test_sync_soft_delete(auth_client, test_db, test_user_and_token):
     user, device, _ = test_user_and_token

@@ -34,8 +34,8 @@ async def create_review(
         file_ext = avatar.filename.split('.')[-1] if avatar.filename else 'png'
         file_path = f"reviews/avatars/{uuid.uuid4()}.{file_ext}"
         try:
-            # Upload to the flowspace-media bucket
-            avatar_url = upload_file_to_supabase("flowspace-media", file_path, file_bytes, avatar.content_type or "image/png")
+            # Upload to the media bucket
+            avatar_url = upload_file_to_supabase("media", file_path, file_bytes, avatar.content_type or "image/png")
         except Exception as e:
             safe_msg = safe_error_message(e, fallback="Failed to upload avatar")
             raise HTTPException(status_code=500, detail=safe_msg)
