@@ -4,8 +4,9 @@ from app.core.config import settings
 
 from app.core.config import settings
 
+db_url = settings.DATABASE_URL.replace("?pgbouncer=true", "")
 engine = create_engine(
-    settings.DATABASE_URL,
+    db_url,
     pool_pre_ping=True,
 )
 
