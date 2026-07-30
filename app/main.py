@@ -3,7 +3,7 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.db.database import engine
-from app.api.v1 import auth, sync, backup, entities, social, media, devices, ai, user, reviews
+from app.api.v1 import auth, sync, backup, entities, social, media, devices, ai, user, reviews, admin
 from app.core.rate_limit import setup_rate_limiting
 import logging
 import json
@@ -52,6 +52,7 @@ app.include_router(devices.router, prefix="/api/v1/devices", tags=["devices"])
 app.include_router(ai.router, prefix="/api/v1/ai", tags=["ai"])
 app.include_router(user.router, prefix="/api/v1/user", tags=["user"])
 app.include_router(reviews.router, prefix="/api/v1/reviews", tags=["reviews"])
+app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 
 @app.get("/")
 def root():
