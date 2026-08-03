@@ -36,7 +36,22 @@ class TaskResponse(TaskBase):
 
 class HabitBase(BaseModel):
     title: str
-    frequency: str
+    icon_code: Optional[str] = None
+    category: Optional[str] = None
+    frequency_type: str = "daily"
+    target_weekdays: Optional[List[int]] = None
+    target_times_per_week: int = 7
+    reminder_time: Optional[datetime] = None
+    is_archived: bool = False
+    is_paused: bool = False
+    available_freezes: int = 0
+    season_id: Optional[str] = None
+    freezes_used_log: Optional[List[datetime]] = None
+    pause_windows: Optional[List[dict]] = None
+    best_streak: int = 0
+    
+    # Legacy fields
+    frequency: Optional[str] = None
     streak: int = 0
 
 class HabitResponse(HabitBase):

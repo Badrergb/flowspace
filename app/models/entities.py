@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, Text, Numeric, Date
+from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, Text, Numeric, Date, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.database import Base
@@ -45,7 +45,22 @@ class Habit(Base, UUIDMixin, TimeStampMixin, VersionMixin):
     __tablename__ = "habits"
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String, nullable=False)
-    frequency = Column(String, nullable=False) # e.g., 'daily', 'weekly'
+    icon_code = Column(String, nullable=True)
+    category = Column(String, nullable=True)
+    frequency_type = Column(String, nullable=False, default="daily")
+    target_weekdays = Column(JSON, nullable=True)
+    target_times_per_week = Column(Integer, default=7)
+    reminder_time = Column(DateTime, nullable=True)
+    is_archived = Column(Boolean, default=False)
+    is_paused = Column(Boolean, default=False)
+    available_freezes = Column(Integer, default=0)
+    season_id = Column(String, nullable=True)
+    freezes_used_log = Column(JSON, nullable=True)
+    pause_windows = Column(JSON, nullable=True)
+    best_streak = Column(Integer, default=0)
+    
+    # Legacy fields kept for backward compatibility if needed temporarily
+    frequency = Column(String, nullable=True)
     streak = Column(Integer, default=0)
     category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True)
     
@@ -55,6 +70,7 @@ class HabitLog(Base, UUIDMixin, TimeStampMixin, VersionMixin):
     __tablename__ = "habit_logs"
     habit_id = Column(UUID(as_uuid=True), ForeignKey("habits.id"), nullable=False, index=True)
     completed_at = Column(DateTime, nullable=False)
+    note = Column(Text, nullable=True)
 
 class Goal(Base, UUIDMixin, TimeStampMixin, VersionMixin):
     __tablename__ = "goals"
