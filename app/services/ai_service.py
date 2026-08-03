@@ -142,7 +142,7 @@ def chat_with_data(query: str, db: Session, user_id) -> str:
     
     try:
         response = ai_client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}]
         )
         return response.choices[0].message.content.strip()
