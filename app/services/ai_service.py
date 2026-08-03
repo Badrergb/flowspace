@@ -20,8 +20,11 @@ except ImportError:
     client = None
 
 def _get_client():
-    if not client or os.environ.get("GROQ_API_KEY") is None:
-        logger.warning("Groq not configured. Falling back to mock responses.")
+    if not client:
+        logger.warning("Groq not configured due to missing openai library.")
+        return None
+    if os.environ.get("GROQ_API_KEY") is None:
+        logger.warning("Groq API Key is None.")
         return None
     return client
 
@@ -124,8 +127,13 @@ def chat_with_data(query: str, db: Session, user_id) -> str:
     Answers user queries grounded in their data.
     """
     ai_client = _get_client()
-    if not ai_client or not _check_ai_enabled(db, user_id):
-        return "I am an AI assistant. Unfortunately, my API key is not configured or AI features are disabled in your settings."
+    if not ai_client:
+        if os.environ.get("GROQ_API_KEY") is None:
+            return "Backend Error: GROQ_API_KEY is completely missing from Render environment variables."
+        return "Backend Error: The 'openai' python package failed to load or is not installed."
+        
+    if not _check_ai_enabled(db, user_id):
+        return "AI features are disabled in your settings."
         
     check_and_increment_quota(db, user_id)
         
