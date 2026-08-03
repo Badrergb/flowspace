@@ -6,7 +6,8 @@ from app.schemas.sync import SyncOperationSchema
 from app.models.entities import (
     Category, Task, Note, Habit, HabitLog, Goal, GoalProgress, 
     Journal, CalendarEvent, Reminder, UserSettings, WaterLog, 
-    WorkoutSession, WorkoutSet, Transaction
+    WorkoutSession, WorkoutSet, Transaction,
+    StudySession, FlashcardDeck, Flashcard, DailyReflection
 )
 import uuid
 import logging
@@ -30,7 +31,11 @@ ENTITY_MODEL_MAP = {
     "water_log": WaterLog,
     "workout_session": WorkoutSession,
     "workout_set": WorkoutSet,
-    "transaction": Transaction
+    "transaction": Transaction,
+    "study_session": StudySession,
+    "flashcard_deck": FlashcardDeck,
+    "flashcard": Flashcard,
+    "daily_reflection": DailyReflection
 }
 
 class SyncService:

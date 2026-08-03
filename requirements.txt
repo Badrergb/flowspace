@@ -13,5 +13,4 @@ slowapi
 alembic
 boto3
 firebase-admin
-
-
+openai

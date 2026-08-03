@@ -143,3 +143,35 @@ class Transaction(Base, UUIDMixin, TimeStampMixin, VersionMixin):
     category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True)
     date = Column(DateTime, nullable=False)
     note = Column(Text, nullable=True)
+
+class StudySession(Base, UUIDMixin, TimeStampMixin, VersionMixin):
+    __tablename__ = "study_sessions"
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    duration_minutes = Column(Integer, nullable=False)
+    content_link = Column(String, nullable=True)
+    ambient_sound = Column(String, nullable=True)
+    is_completed = Column(Boolean, default=False)
+    completed_at = Column(DateTime, nullable=True)
+
+class FlashcardDeck(Base, UUIDMixin, TimeStampMixin, VersionMixin):
+    __tablename__ = "flashcard_decks"
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+
+class Flashcard(Base, UUIDMixin, TimeStampMixin, VersionMixin):
+    __tablename__ = "flashcards"
+    deck_id = Column(UUID(as_uuid=True), ForeignKey("flashcard_decks.id"), nullable=False, index=True)
+    front_content = Column(Text, nullable=False)
+    back_content = Column(Text, nullable=False)
+    ease_factor = Column(Numeric(10, 4), default=2.5)
+    interval_days = Column(Integer, default=0)
+    repetitions = Column(Integer, default=0)
+    due_date = Column(DateTime, nullable=False)
+
+class DailyReflection(Base, UUIDMixin, TimeStampMixin, VersionMixin):
+    __tablename__ = "daily_reflections"
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    rating = Column(Integer, nullable=False)
+    highlights = Column(Text, nullable=True)
+    improvements = Column(Text, nullable=True)
+    date = Column(DateTime, nullable=False)
