@@ -148,4 +148,4 @@ def chat_with_data(query: str, db: Session, user_id) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"Failed to chat via AI: {e}")
-        return "Sorry, I couldn't process that request."
+        return f"AI Connection Error: {str(e)}"
