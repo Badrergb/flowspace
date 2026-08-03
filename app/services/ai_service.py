@@ -137,13 +137,21 @@ def chat_with_data(query: str, db: Session, user_id) -> str:
         
     check_and_increment_quota(db, user_id)
         
-    # Gather context (e.g. active goals)
-    prompt = f"You are a helpful personal assistant. The user asks: '{query}'. Provide a brief helpful answer."
+    system_prompt = (
+        "Your name is Flow AI. You are a highly focused productivity assistant built directly into the FlowSpace app. "
+        "You must ONLY answer questions related to productivity, time management, habits, the FlowSpace app itself, or the user's tasks and goals. "
+        "If the user asks you a question about any other topic (such as general knowledge, coding, history, entertainment, etc.), "
+        "you must politely decline to answer and remind them that you are Flow AI, a productivity assistant. "
+        "Keep your answers concise, encouraging, and highly relevant."
+    )
     
     try:
         response = ai_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query}
+            ]
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
