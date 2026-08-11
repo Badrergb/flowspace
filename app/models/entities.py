@@ -175,3 +175,11 @@ class DailyReflection(Base, UUIDMixin, TimeStampMixin, VersionMixin):
     highlights = Column(Text, nullable=True)
     improvements = Column(Text, nullable=True)
     date = Column(DateTime, nullable=False)
+
+class LiveFocusSession(Base, UUIDMixin, TimeStampMixin, VersionMixin):
+    __tablename__ = "live_focus_sessions"
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True, unique=True)
+    status = Column(String, default="studying")
+    current_activity = Column(String, nullable=True)
+    started_at = Column(DateTime, nullable=False)
+    last_ping_at = Column(DateTime, nullable=False)

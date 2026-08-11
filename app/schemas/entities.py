@@ -218,3 +218,43 @@ class GoalProgressResponse(GoalProgressBase):
     deleted_at: Optional[datetime] = None
     version: int
     model_config = {"from_attributes": True}
+
+class FlashcardDeckBase(BaseModel):
+    name: str
+
+class FlashcardDeckResponse(FlashcardDeckBase):
+    id: UUID4
+    user_id: UUID4
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: Optional[datetime] = None
+    version: int
+    model_config = {"from_attributes": True}
+
+class FlashcardBase(BaseModel):
+    deck_id: UUID4
+    front_content: str
+    back_content: str
+    ease_factor: Decimal = Decimal('2.5')
+    interval_days: int = 0
+    repetitions: int = 0
+    due_date: datetime
+
+class FlashcardResponse(FlashcardBase):
+    id: UUID4
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: Optional[datetime] = None
+    version: int
+    model_config = {"from_attributes": True}
+
+class LiveFocusSessionBase(BaseModel):
+    status: str
+    current_activity: Optional[str] = None
+
+class LiveFocusSessionResponse(LiveFocusSessionBase):
+    id: UUID4
+    user_id: UUID4
+    started_at: datetime
+    last_ping_at: datetime
+    model_config = {"from_attributes": True}

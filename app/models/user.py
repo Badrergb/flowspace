@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean
+from sqlalchemy import Column, String, Boolean, DateTime, Integer
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 from app.models.base import UUIDMixin, TimeStampMixin
@@ -11,6 +11,10 @@ class User(Base, UUIDMixin, TimeStampMixin):
     full_name = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)
+    otp_hash = Column(String, nullable=True)
+    otp_expires_at = Column(DateTime(timezone=True), nullable=True)
+    otp_attempts = Column(Integer, default=0)
     
     devices = relationship("Device", back_populates="user")
     tasks = relationship("Task", back_populates="user")
