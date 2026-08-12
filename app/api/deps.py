@@ -16,16 +16,34 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        email: str = payload.get("email")
+        from firebase_admin import auth
+        decoded_token = auth.verify_id_token(token)
+        email = decoded_token.get("email")
         if email is None:
             raise credentials_exception
         token_data = TokenData(email=email)
-    except JWTError:
+    except Exception as e:
+        print(f"Auth error: {e}")
         raise credentials_exception
     user = db.query(User).filter(User.email == token_data.email).first()
     if user is None:
-        raise credentials_exception
+        # Auto-create the user from the Firebase token
+        try:
+            user = User(
+                email=token_data.email,
+                hashed_password="firebase_auth",
+                full_name=email.split('@')[0],
+                is_active=True,
+                is_verified=True,
+                otp_attempts=0
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        except Exception as e:
+            print(f"Failed to auto-create user: {e}")
+            raise credentials_exception
+            
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     return user
