@@ -25,7 +25,13 @@ app = FastAPI(
 
 if settings.FIREBASE_CREDENTIALS_JSON:
     try:
-        cred_dict = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+        # Clean up common copy-paste errors
+        raw_json = settings.FIREBASE_CREDENTIALS_JSON
+        if raw_json.startswith("'") and raw_json.endswith("'"):
+            raw_json = raw_json[1:-1]
+        raw_json = raw_json.replace('\\n', '\n')
+        
+        cred_dict = json.loads(raw_json)
         cred = credentials.Certificate(cred_dict)
         firebase_admin.initialize_app(cred)
         logging.info("Firebase Admin initialized successfully.")
