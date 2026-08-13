@@ -29,9 +29,11 @@ if settings.FIREBASE_CREDENTIALS_JSON:
         raw_json = settings.FIREBASE_CREDENTIALS_JSON
         if raw_json.startswith("'") and raw_json.endswith("'"):
             raw_json = raw_json[1:-1]
-        raw_json = raw_json.replace('\\n', '\n')
         
         cred_dict = json.loads(raw_json)
+        if 'private_key' in cred_dict:
+            cred_dict['private_key'] = cred_dict['private_key'].replace('\\n', '\n')
+            
         cred = credentials.Certificate(cred_dict)
         firebase_admin.initialize_app(cred)
         logging.info("Firebase Admin initialized successfully.")
