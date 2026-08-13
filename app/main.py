@@ -64,14 +64,14 @@ app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(study.router, prefix="/api/v1/study", tags=["study"])
 app.include_router(finance.router, prefix="/api/v1/finance", tags=["finance"])
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {
         "application": settings.PROJECT_NAME,
         "status": "running",
     }
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     try:
         with engine.connect() as connection:
