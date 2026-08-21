@@ -1,8 +1,6 @@
 import os
 import json
 import logging
-from sqlalchemy.orm import Session
-from app.models.entities import Transaction, Task, Habit, HabitLog, Journal, UserSettings
 from app.core.config import settings
 from datetime import date, datetime, timedelta
 from fastapi import HTTPException
@@ -28,32 +26,66 @@ def _get_client():
         return None
     return client
 
-def _check_ai_enabled(db: Session, user_id) -> bool:
-    settings_obj = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
-    if settings_obj and not settings_obj.ai_features_enabled:
-        return False
+def _check_ai_enabled(db, user_id) -> bool:
+    try:
+        settings_doc = (
+            db.collection("users")
+            .document(user_id)
+            .collection("settings")
+            .document("preferences")
+            .get()
+        )
+        if settings_doc.exists:
+            data = settings_doc.to_dict()
+            if not data.get("ai_features_enabled", True):
+                return False
+    except Exception:
+        pass
     return True
 
-def check_and_increment_quota(db: Session, user_id):
-    user_settings = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
-    if not user_settings:
-        return
-
-    # Reset the counter if it's a new day
-    if user_settings.ai_quota_reset_at < date.today():
-        user_settings.ai_requests_used = 0
-        user_settings.ai_quota_reset_at = date.today()
-
-    if user_settings.ai_requests_used >= settings.AI_DAILY_REQUEST_LIMIT:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Daily AI limit reached ({settings.AI_DAILY_REQUEST_LIMIT}/day). Resets at midnight."
+def check_and_increment_quota(db, user_id):
+    try:
+        ref = (
+            db.collection("users")
+            .document(user_id)
+            .collection("settings")
+            .document("preferences")
         )
+        doc = ref.get()
+        today_str = date.today().isoformat()
 
-    user_settings.ai_requests_used += 1
-    db.commit()
+        if doc.exists:
+            data = doc.to_dict()
+            reset_at = data.get("ai_quota_reset_at", today_str)
+            requests_used = data.get("ai_requests_used", 0)
 
-def categorize_transactions(transactions: list[str], db: Session, user_id) -> dict:
+            if reset_at < today_str:
+                requests_used = 0
+                reset_at = today_str
+
+            if requests_used >= settings.AI_DAILY_REQUEST_LIMIT:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Daily AI limit reached ({settings.AI_DAILY_REQUEST_LIMIT}/day). Resets at midnight."
+                )
+
+            ref.set({
+                "ai_requests_used": requests_used + 1,
+                "ai_quota_reset_at": today_str,
+                "ai_features_enabled": data.get("ai_features_enabled", True),
+            }, merge=True)
+        else:
+            ref.set({
+                "ai_requests_used": 1,
+                "ai_quota_reset_at": today_str,
+                "ai_features_enabled": True,
+            })
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Could not check AI quota: {e}")
+
+def categorize_transactions(transactions: list, db, user_id) -> dict:
     """
     Takes a list of transaction descriptions and returns a dictionary
     mapping each description to a category.
@@ -61,11 +93,16 @@ def categorize_transactions(transactions: list[str], db: Session, user_id) -> di
     ai_client = _get_client()
     if not ai_client or not _check_ai_enabled(db, user_id):
         return {tx: "Other" for tx in transactions}
-        
+
     check_and_increment_quota(db, user_id)
-        
-    prompt = f"Categorize the following transactions into standard budgeting categories (e.g., Food, Transport, Utilities, Entertainment, Housing, Other).\nReturn a JSON object where keys are the descriptions and values are the categories.\n\nTransactions: {json.dumps(transactions)}"
-    
+
+    prompt = (
+        "Categorize the following transactions into standard budgeting categories "
+        "(e.g., Food, Transport, Utilities, Entertainment, Housing, Other).\n"
+        "Return a JSON object where keys are the descriptions and values are the categories.\n\n"
+        f"Transactions: {json.dumps(transactions)}"
+    )
+
     try:
         response = ai_client.chat.completions.create(
             model="llama3-70b-8192",
@@ -77,41 +114,49 @@ def categorize_transactions(transactions: list[str], db: Session, user_id) -> di
         logger.error(f"Failed to categorize via AI: {e}")
         return {tx: "Other" for tx in transactions}
 
-def generate_weekly_review(db: Session, user_id) -> str:
+def generate_weekly_review(db, user_id) -> str:
     """
     Generates a motivational weekly review summary.
     """
     ai_client = _get_client()
     if not ai_client or not _check_ai_enabled(db, user_id):
         return "You had a great week! Keep up the momentum!"
-        
+
     check_and_increment_quota(db, user_id)
-        
-    # Gather context: Get tasks completed in the last 7 days
+
+    # Gather context from Firestore
     seven_days_ago = datetime.utcnow() - timedelta(days=7)
-    
-    completed_tasks = db.query(Task).filter(
-        Task.user_id == user_id, 
-        Task.is_completed == True,
-        Task.updated_at >= seven_days_ago
-    ).all()
-    
-    completed_habits = db.query(HabitLog).join(Habit).filter(
-        Habit.user_id == user_id,
-        HabitLog.completed_at >= seven_days_ago
-    ).all()
-    
+
+    try:
+        task_docs = (
+            db.collection("users").document(user_id).collection("tasks")
+            .where("is_completed", "==", True)
+            .stream()
+        )
+        completed_tasks = [doc.to_dict() for doc in task_docs]
+
+        habit_docs = (
+            db.collection("users").document(user_id).collection("habit_logs")
+            .stream()
+        )
+        completed_habits = [doc.to_dict() for doc in habit_docs]
+    except Exception:
+        completed_tasks = []
+        completed_habits = []
+
     task_count = len(completed_tasks)
     habit_count = len(completed_habits)
-    
-    task_titles = [t.title for t in completed_tasks[:5]] # sample up to 5 tasks
-    
+    task_titles = [t.get("title", "") for t in completed_tasks[:5]]
+
     context_str = f"This week, the user completed {task_count} tasks and logged {habit_count} habit completions."
     if task_titles:
         context_str += f" Some tasks they finished: {', '.join(task_titles)}."
 
-    prompt = f"Based on the user's activity: '{context_str}', write a short, highly encouraging 2-sentence summary of their productivity this week."
-    
+    prompt = (
+        f"Based on the user's activity: '{context_str}', "
+        "write a short, highly encouraging 2-sentence summary of their productivity this week."
+    )
+
     try:
         response = ai_client.chat.completions.create(
             model="llama3-70b-8192",
@@ -122,7 +167,7 @@ def generate_weekly_review(db: Session, user_id) -> str:
         logger.error(f"Failed to generate review via AI: {e}")
         return "You had a great week! Keep up the momentum!"
 
-def chat_with_data(query: str, db: Session, user_id) -> str:
+def chat_with_data(query: str, db, user_id) -> str:
     """
     Answers user queries grounded in their data.
     """
@@ -131,12 +176,12 @@ def chat_with_data(query: str, db: Session, user_id) -> str:
         if os.environ.get("GROQ_API_KEY") is None:
             return "Backend Error: GROQ_API_KEY is completely missing from Render environment variables."
         return "Backend Error: The 'openai' python package failed to load or is not installed."
-        
+
     if not _check_ai_enabled(db, user_id):
         return "AI features are disabled in your settings."
-        
+
     check_and_increment_quota(db, user_id)
-        
+
     system_prompt = (
         "Your name is Flow AI. You are a highly focused productivity assistant built directly into the FlowSpace app. "
         "You must ONLY answer questions related to productivity, time management, habits, the FlowSpace app itself, or the user's tasks and goals. "
@@ -144,7 +189,7 @@ def chat_with_data(query: str, db: Session, user_id) -> str:
         "you must politely decline to answer and remind them that you are Flow AI, a productivity assistant. "
         "Keep your answers concise, encouraging, and highly relevant."
     )
-    
+
     try:
         response = ai_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
