@@ -1,6 +1,7 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from google.cloud.firestore_v1 import Client as FirestoreClient
 
 from app.db.database import get_db
@@ -25,7 +26,7 @@ class SyncUploadRequest(BaseModel):
 
 class SyncDownloadRequest(BaseModel):
     device_id: str
-    last_sync_version: str | None = None
+    last_sync_version: Optional[str] = None
 
 
 @router.post("/upload")

@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List
 import uuid
@@ -23,12 +24,12 @@ class CardCreate(BaseModel):
     ease_factor: float = 2.5
     interval_days: int = 0
     repetitions: int = 0
-    due_date: str | None = None
+    due_date: Optional[str] = None
 
 
 class LiveFocusSessionCreate(BaseModel):
     status: str = "studying"
-    current_activity: str | None = None
+    current_activity: Optional[str] = None
 
 
 class FocusInviteRequest(BaseModel):

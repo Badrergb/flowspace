@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel
+from typing import Optional
 from firebase_admin import auth as firebase_auth
 from app.core.rate_limit import limiter
 
@@ -9,7 +10,7 @@ router = APIRouter()
 class RegisterRequest(BaseModel):
     email: str
     password: str
-    full_name: str | None = None
+    full_name: Optional[str] = None
 
 
 class LoginRequest(BaseModel):

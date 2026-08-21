@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from google.cloud.firestore_v1 import Client as FirestoreClient
 from firebase_admin import auth as firebase_auth
@@ -13,10 +14,10 @@ router = APIRouter()
 
 
 class UserProfileUpdate(BaseModel):
-    username: str | None = None
-    full_name: str | None = None
-    phone_number: str | None = None
-    avatar_url: str | None = None
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 
 @router.post("/profile")
