@@ -66,8 +66,7 @@ def run_migrations_online() -> None:
 
     """
     config_section = config.get_section(config.config_ini_section, {})
-    db_url = settings.DIRECT_URL or settings.DATABASE_URL
-    config_section["sqlalchemy.url"] = db_url.replace("?pgbouncer=true", "")
+    config_section["sqlalchemy.url"] = settings.DATABASE_URL
     connectable = engine_from_config(
         config_section,
         prefix="sqlalchemy.",

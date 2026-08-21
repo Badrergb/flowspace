@@ -1,69 +1,76 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from fastapi import APIRouter, Depends
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
+from google.cloud.firestore_v1 import Client as FirestoreClient
 
 from app.db.database import get_db
-from app.models.user import User
 from app.api.deps import get_current_user
-from app.models.entities import Transaction, Category
 
 router = APIRouter()
 
+
 @router.get("/overview")
-def get_finance_overview(days: int = 30, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Calculate date range
+def get_finance_overview(
+    days: int = 30,
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
 
-    # Get transactions in range
-    transactions = db.query(Transaction).filter(
-        Transaction.user_id == current_user.id,
-        Transaction.date >= start_date,
-        Transaction.date <= end_date
-    ).all()
+    # Fetch all transactions from Firestore
+    txn_docs = (
+        db.collection("users")
+        .document(uid)
+        .collection("transactions")
+        .stream()
+    )
 
-    total_spent = sum([float(t.amount) for t in transactions if t.type == 'expense'])
-    total_income = sum([float(t.amount) for t in transactions if t.type == 'income'])
+    transactions = [doc.to_dict() for doc in txn_docs]
 
-    # Aggregate by date for sparkline
+    total_spent = 0.0
+    total_income = 0.0
     daily_spending = {}
+    category_spending = {}
+
     for i in range(days):
-        d = (end_date - timedelta(days=i)).date()
+        d = (end_date - timedelta(days=i)).date().isoformat()
         daily_spending[d] = 0.0
-        
+
     for t in transactions:
-        if t.type == 'expense':
-            d = t.date.date()
+        txn_date = t.get("date")
+        if hasattr(txn_date, "date"):
+            d = txn_date.date().isoformat()
+        elif isinstance(txn_date, str):
+            d = txn_date[:10]
+        else:
+            continue
+
+        amount = float(t.get("amount", 0))
+        txn_type = t.get("type", "")
+
+        if txn_type == "expense":
+            total_spent += amount
             if d in daily_spending:
-                daily_spending[d] += float(t.amount)
+                daily_spending[d] += amount
+            cat_id = t.get("category_id")
+            if cat_id:
+                category_spending[cat_id] = category_spending.get(cat_id, 0.0) + amount
+        elif txn_type == "income":
+            total_income += amount
 
     sparkline_data = [daily_spending[k] for k in sorted(daily_spending.keys())]
 
-    # Aggregate by category
-    category_spending = {}
-    for t in transactions:
-        if t.type == 'expense' and t.category_id:
-            cat_id = str(t.category_id)
-            category_spending[cat_id] = category_spending.get(cat_id, 0.0) + float(t.amount)
-
-    # Fetch categories
-    categories = db.query(Category).filter(
-        Category.id.in_(list(category_spending.keys()))
-    ).all()
-    
-    cat_map = {str(c.id): c.name for c in categories}
-    
     top_categories = [
-        {"id": k, "name": cat_map.get(k, "Unknown"), "amount": v}
+        {"id": k, "name": k, "amount": v}
         for k, v in category_spending.items()
     ]
-    top_categories.sort(key=lambda x: x['amount'], reverse=True)
+    top_categories.sort(key=lambda x: x["amount"], reverse=True)
 
     return {
         "total_spent": total_spent,
         "total_income": total_income,
         "sparkline_data": sparkline_data,
-        "top_categories": top_categories[:5]
+        "top_categories": top_categories[:5],
     }

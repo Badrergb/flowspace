@@ -1,112 +1,212 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_, desc
 from typing import List
 import uuid
+from datetime import datetime
+from google.cloud.firestore_v1 import Client as FirestoreClient
+from google.cloud import firestore
+from pydantic import BaseModel
 
 from app.db.database import get_db
-from app.models.user import User
 from app.api.deps import get_current_user
-from app.models.social import Friendship, FeedPost, FeedComment, FeedLike, ChatThread, ChatMessage, chat_participants
-from app.schemas.social import (
-    FriendshipBase, FriendshipResponse,
-    FeedPostBase, FeedPostResponse,
-    FeedCommentBase, FeedCommentResponse,
-    FeedLikeBase, FeedLikeResponse,
-    ChatMessageBase, ChatMessageResponse,
-    ChatThreadResponse
-)
 
 router = APIRouter()
 
+
+class FriendRequestByUsername(BaseModel):
+    username: str
+
+
+class FriendRequestById(BaseModel):
+    friend_id: str
+
+
+class FeedPostCreate(BaseModel):
+    content: str
+    visibility: str = "public"
+
+
+class ChatMessageCreate(BaseModel):
+    content: str
+
+
+def _thread_id(uid1: str, uid2: str) -> str:
+    return "__".join(sorted([uid1, uid2]))
+
+
 # --- Friends ---
 
-@router.post("/friends/request", response_model=FriendshipResponse)
-def send_friend_request(req: FriendshipBase, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if str(req.friend_id) == str(current_user.id):
+@router.post("/friends/request/by-username")
+def send_friend_request_by_username(
+    req: FriendRequestByUsername,
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
+    # Find target user by username field in Firestore
+    results = db.collection("users").where("username", "==", req.username).limit(1).get()
+    if not results:
+        results = db.collection("users").where("email", "==", req.username).limit(1).get()
+    if not results:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    target_doc = results[0]
+    target_uid = target_doc.id
+
+    if target_uid == uid:
         raise HTTPException(status_code=400, detail="Cannot send friend request to yourself")
-    
-    existing = db.query(Friendship).filter(
-        and_(Friendship.user_id == current_user.id, Friendship.friend_id == req.friend_id)
-    ).first()
-    
-    if existing:
+
+    friendship_id = f"{uid}_{target_uid}"
+    existing = db.collection("friendships").document(friendship_id).get()
+    if existing.exists:
         raise HTTPException(status_code=400, detail="Friend request already sent")
-        
-    friendship = Friendship(id=uuid.uuid4(), user_id=current_user.id, friend_id=req.friend_id, status="pending")
-    db.add(friendship)
-    db.commit()
-    db.refresh(friendship)
-    return friendship
 
-@router.post("/friends/accept", response_model=FriendshipResponse)
-def accept_friend_request(req: FriendshipBase, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # Look for a pending request where we are the friend_id
-    existing = db.query(Friendship).filter(
-        and_(Friendship.user_id == req.friend_id, Friendship.friend_id == current_user.id, Friendship.status == "pending")
-    ).first()
-    
-    if not existing:
+    db.collection("friendships").document(friendship_id).set({
+        "id": friendship_id,
+        "user_id": uid,
+        "friend_id": target_uid,
+        "status": "pending",
+        "created_at": firestore.SERVER_TIMESTAMP,
+    })
+    return {"id": friendship_id, "status": "pending"}
+
+
+@router.post("/friends/accept")
+def accept_friend_request(
+    req: FriendRequestById,
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
+    friendship_id = f"{req.friend_id}_{uid}"
+    ref = db.collection("friendships").document(friendship_id)
+    doc = ref.get()
+
+    if not doc.exists or doc.to_dict().get("status") != "pending":
         raise HTTPException(status_code=404, detail="Friend request not found")
-        
-    existing.status = "accepted"
-    
-    # Create reciprocal friendship for easier querying
-    reciprocal = Friendship(id=uuid.uuid4(), user_id=current_user.id, friend_id=req.friend_id, status="accepted")
-    db.add(reciprocal)
-    db.commit()
-    db.refresh(existing)
-    return existing
 
-@router.get("/friends", response_model=List[FriendshipResponse])
-def get_friends(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(Friendship).filter(Friendship.user_id == current_user.id).all()
+    ref.update({"status": "accepted"})
+    # Create reciprocal
+    db.collection("friendships").document(f"{uid}_{req.friend_id}").set({
+        "id": f"{uid}_{req.friend_id}",
+        "user_id": uid,
+        "friend_id": req.friend_id,
+        "status": "accepted",
+        "created_at": firestore.SERVER_TIMESTAMP,
+    })
+    return {"message": "Friend request accepted"}
+
+
+@router.get("/friends")
+def get_friends(
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
+    docs = db.collection("friendships").where("user_id", "==", uid).stream()
+    return [{**doc.to_dict(), "id": doc.id} for doc in docs]
+
 
 # --- Feed ---
 
-@router.post("/feed", response_model=FeedPostResponse)
-def create_feed_post(post: FeedPostBase, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    new_post = FeedPost(id=uuid.uuid4(), user_id=current_user.id, content=post.content, visibility=post.visibility)
-    db.add(new_post)
-    db.commit()
-    db.refresh(new_post)
-    return new_post
+@router.post("/feed")
+def create_feed_post(
+    post: FeedPostCreate,
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
+    post_id = str(uuid.uuid4())
+    data = {
+        "id": post_id,
+        "user_id": uid,
+        "content": post.content,
+        "visibility": post.visibility,
+        "created_at": firestore.SERVER_TIMESTAMP,
+    }
+    db.collection("feed_posts").document(post_id).set(data)
+    data["created_at"] = None
+    return data
 
-@router.get("/feed", response_model=List[FeedPostResponse])
-def get_feed(skip: int = Query(0), limit: int = Query(50), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+
+@router.get("/feed")
+def get_feed(
+    skip: int = Query(0),
+    limit: int = Query(50),
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
     # Get friend IDs
-    friend_ids_query = db.query(Friendship.friend_id).filter(
-        Friendship.user_id == current_user.id, 
-        Friendship.status == "accepted"
+    friend_docs = db.collection("friendships").where("user_id", "==", uid).where("status", "==", "accepted").stream()
+    friend_ids = {doc.to_dict()["friend_id"] for doc in friend_docs}
+    friend_ids.add(uid)
+
+    # Fetch public posts from friends + own posts
+    posts = []
+    docs = (
+        db.collection("feed_posts")
+        .order_by("created_at", direction="DESCENDING")
+        .limit(limit + skip)
+        .stream()
     )
-    
-    posts = db.query(FeedPost).filter(
-        or_(
-            FeedPost.user_id == current_user.id,
-            and_(FeedPost.user_id.in_(friend_ids_query), FeedPost.visibility != "private")
-        )
-    ).order_by(desc(FeedPost.created_at)).offset(skip).limit(limit).all()
-    
-    return posts
+    for doc in docs:
+        d = doc.to_dict()
+        if d.get("user_id") in friend_ids:
+            if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
+                d["created_at"] = d["created_at"].isoformat()
+            posts.append(d)
+
+    return posts[skip:skip + limit]
+
 
 # --- Chat ---
 
-@router.post("/chat/{thread_id}/messages", response_model=ChatMessageResponse)
-def send_message(thread_id: uuid.UUID, msg: ChatMessageBase, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # For MVP, assume thread exists. Ideally, check if current_user is in thread.
-    thread = db.query(ChatThread).filter(ChatThread.id == thread_id).first()
-    if not thread:
-        # Create thread implicitly if it doesn't exist
-        thread = ChatThread(id=thread_id)
-        db.add(thread)
-        db.commit()
-        
-    new_msg = ChatMessage(id=uuid.uuid4(), thread_id=thread_id, sender_id=current_user.id, content=msg.content)
-    db.add(new_msg)
-    db.commit()
-    db.refresh(new_msg)
-    return new_msg
+@router.post("/chat/{friend_id}/messages")
+def send_message(
+    friend_id: str,
+    msg: ChatMessageCreate,
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
+    thread_id = _thread_id(uid, friend_id)
+    msg_id = str(uuid.uuid4())
+    data = {
+        "id": msg_id,
+        "thread_id": thread_id,
+        "sender_id": uid,
+        "content": msg.content,
+        "created_at": firestore.SERVER_TIMESTAMP,
+    }
+    db.collection("chat_threads").document(thread_id).collection("messages").document(msg_id).set(data)
+    data["created_at"] = None
+    return data
 
-@router.get("/chat/{thread_id}/messages", response_model=List[ChatMessageResponse])
-def get_messages(thread_id: uuid.UUID, skip: int = Query(0), limit: int = Query(50), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return db.query(ChatMessage).filter(ChatMessage.thread_id == thread_id).order_by(desc(ChatMessage.created_at)).offset(skip).limit(limit).all()
+
+@router.get("/chat/{friend_id}/messages")
+def get_messages(
+    friend_id: str,
+    skip: int = Query(0),
+    limit: int = Query(50),
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
+    thread_id = _thread_id(uid, friend_id)
+    docs = (
+        db.collection("chat_threads")
+        .document(thread_id)
+        .collection("messages")
+        .order_by("created_at", direction="DESCENDING")
+        .limit(limit)
+        .stream()
+    )
+    results = []
+    for i, doc in enumerate(docs):
+        if i < skip:
+            continue
+        d = doc.to_dict()
+        if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
+            d["created_at"] = d["created_at"].isoformat()
+        results.append(d)
+    return results

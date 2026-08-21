@@ -1,14 +1,16 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy.orm import Session
-from sqlalchemy import func, text
 from typing import Optional
+import datetime
+
+from firebase_admin import auth as firebase_auth
+from google.cloud.firestore_v1 import Client as FirestoreClient
+from google.cloud.firestore_v1 import aggregation
 
 from app.core.config import settings
 from app.db.database import get_db
-from app.models.user import User
-from app.models.entities import Task, Transaction, UserSettings, Habit, Goal, Note
 
 router = APIRouter()
+
 
 def verify_admin_key(x_admin_key: Optional[str] = Header(None)):
     if not x_admin_key or x_admin_key != settings.ADMIN_SECRET_KEY:
@@ -18,119 +20,159 @@ def verify_admin_key(x_admin_key: Optional[str] = Header(None)):
         )
     return True
 
+
 @router.get("/kpis")
 def get_admin_kpis(
-    db: Session = Depends(get_db),
-    _: bool = Depends(verify_admin_key)
+    db: FirestoreClient = Depends(get_db),
+    _: bool = Depends(verify_admin_key),
 ):
-    total_users = db.query(func.count(User.id)).scalar() or 0
-    active_users = db.query(func.count(User.id)).filter(User.is_active == True).scalar() or 0
-    total_tasks = db.query(func.count(Task.id)).scalar() or 0
-    
-    total_revenue = db.query(func.sum(Transaction.amount)).filter(Transaction.type == 'income').scalar() or 0
+    # Count users from Firebase Auth
+    total_users = 0
+    page = firebase_auth.list_users()
+    while page:
+        total_users += len(page.users)
+        page = page.get_next_page()
+
+    # Count total tasks using Firestore collection group query
+    total_tasks = 0
+    try:
+        tasks_query = db.collection_group("tasks")
+        agg_query = tasks_query.count(alias="total")
+        result = agg_query.get()
+        total_tasks = result[0][0].value
+    except Exception:
+        total_tasks = 0
 
     return {
         "total_users": total_users,
-        "active_users": active_users,
+        "active_users": total_users,  # Firebase Auth doesn't track this separately
         "total_tasks": total_tasks,
-        "mrr": float(total_revenue)
+        "mrr": 0.0,
     }
 
+
 @router.get("/system")
-def get_system_health(
-    db: Session = Depends(get_db),
-    _: bool = Depends(verify_admin_key)
-):
-    db_status = "operational"
-    try:
-        db.execute(text("SELECT 1"))
-    except Exception:
-        db_status = "degraded"
-        
+def get_system_health(_: bool = Depends(verify_admin_key)):
     return {
         "services": [
-            {"id": "db-1", "name": "Primary Database", "status": db_status, "latency": 12, "region": "us-east-1"},
-            {"id": "cache-1", "name": "Redis Cache", "status": "operational", "latency": 2, "region": "us-east-1"},
-            {"id": "api-1", "name": "API Gateway", "status": "operational", "latency": 45, "region": "global"}
+            {"id": "firebase-1", "name": "Firebase Firestore", "status": "operational", "latency": 20, "region": "global"},
+            {"id": "firebase-auth", "name": "Firebase Auth", "status": "operational", "latency": 10, "region": "global"},
+            {"id": "api-1", "name": "API Gateway", "status": "operational", "latency": 45, "region": "global"},
         ]
     }
 
+
 @router.get("/ai-usage")
 def get_ai_usage(
-    db: Session = Depends(get_db),
-    _: bool = Depends(verify_admin_key)
+    db: FirestoreClient = Depends(get_db),
+    _: bool = Depends(verify_admin_key),
 ):
-    total_requests = db.query(func.sum(UserSettings.ai_requests_used)).scalar() or 0
-    return {
-        "total_ai_requests": total_requests
-    }
+    total_requests = 0
+    try:
+        users_docs = db.collection("users").stream()
+        for user_doc in users_docs:
+            settings_doc = (
+                db.collection("users")
+                .document(user_doc.id)
+                .collection("settings")
+                .document("preferences")
+                .get()
+            )
+            if settings_doc.exists:
+                data = settings_doc.to_dict()
+                total_requests += data.get("ai_requests_used", 0)
+    except Exception:
+        total_requests = 0
+
+    return {"total_ai_requests": total_requests}
+
 
 @router.get("/analytics/growth")
 def get_analytics_growth(
-    db: Session = Depends(get_db),
-    _: bool = Depends(verify_admin_key)
+    db: FirestoreClient = Depends(get_db),
+    _: bool = Depends(verify_admin_key),
 ):
-    # This is a basic implementation for SQLite/Postgres compatibility.
-    # We fetch all users and aggregate in memory to avoid complex dialect-specific SQL.
-    users = db.query(User.created_at).all()
-    
-    # Aggregate by YYYY-MM-DD
     from collections import defaultdict
+
     daily_counts = defaultdict(int)
-    for u in users:
-        if u.created_at:
-            date_str = u.created_at.strftime("%Y-%m-%d")
-            daily_counts[date_str] += 1
-            
-    # Format for the frontend chart: [{name: '2023-01-01', value: 5}, ...]
+    try:
+        page = firebase_auth.list_users()
+        while page:
+            for user in page.users:
+                if user.user_metadata.creation_timestamp:
+                    dt = datetime.datetime.utcfromtimestamp(
+                        user.user_metadata.creation_timestamp / 1000
+                    )
+                    date_str = dt.strftime("%Y-%m-%d")
+                    daily_counts[date_str] += 1
+            page = page.get_next_page()
+    except Exception:
+        pass
+
     chart_data = [{"name": k, "value": v} for k, v in sorted(daily_counts.items())]
-    
-    # If there's no data, return some sensible defaults so the chart doesn't break
+
     if not chart_data:
-        import datetime
         today = datetime.date.today()
-        chart_data = [{"name": (today - datetime.timedelta(days=i)).strftime("%Y-%m-%d"), "value": 0} for i in range(7, -1, -1)]
-        
+        chart_data = [
+            {"name": (today - datetime.timedelta(days=i)).strftime("%Y-%m-%d"), "value": 0}
+            for i in range(7, -1, -1)
+        ]
+
     return chart_data
+
 
 @router.get("/analytics/activity")
 def get_analytics_activity(
-    db: Session = Depends(get_db),
-    _: bool = Depends(verify_admin_key)
+    db: FirestoreClient = Depends(get_db),
+    _: bool = Depends(verify_admin_key),
 ):
-    # Fetch latest 5 tasks, 5 habits, 5 goals to form an activity feed
-    tasks = db.query(Task).order_by(Task.created_at.desc()).limit(5).all()
-    habits = db.query(Habit).order_by(Habit.created_at.desc()).limit(5).all()
-    goals = db.query(Goal).order_by(Goal.created_at.desc()).limit(5).all()
-    
     feed = []
-    for t in tasks:
-        feed.append({"id": str(t.id), "type": "task", "title": t.title, "created_at": t.created_at})
-    for h in habits:
-        feed.append({"id": str(h.id), "type": "habit", "title": h.title, "created_at": h.created_at})
-    for g in goals:
-        feed.append({"id": str(g.id), "type": "goal", "title": g.title, "created_at": g.created_at})
-        
-    # Sort feed by created_at descending
-    feed.sort(key=lambda x: x["created_at"], reverse=True)
-    
-    # Format for JSON response
+    try:
+        for collection_name in ["tasks", "habits", "goals"]:
+            docs = (
+                db.collection_group(collection_name)
+                .order_by("created_at", direction="DESCENDING")
+                .limit(5)
+                .stream()
+            )
+            for doc in docs:
+                d = doc.to_dict()
+                feed.append({
+                    "id": doc.id,
+                    "type": collection_name.rstrip("s"),
+                    "title": d.get("title", "Untitled"),
+                    "created_at": d.get("created_at"),
+                })
+    except Exception:
+        pass
+
+    feed.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     for item in feed:
-        item["created_at"] = item["created_at"].isoformat() if item["created_at"] else None
-        
+        if item.get("created_at") and hasattr(item["created_at"], "isoformat"):
+            item["created_at"] = item["created_at"].isoformat()
+
     return feed
+
 
 @router.get("/analytics/features")
 def get_analytics_features(
-    db: Session = Depends(get_db),
-    _: bool = Depends(verify_admin_key)
+    db: FirestoreClient = Depends(get_db),
+    _: bool = Depends(verify_admin_key),
 ):
-    # Count totals to see feature popularity
-    return [
-        {"name": "Tasks", "value": db.query(func.count(Task.id)).scalar() or 0},
-        {"name": "Habits", "value": db.query(func.count(Habit.id)).scalar() or 0},
-        {"name": "Goals", "value": db.query(func.count(Goal.id)).scalar() or 0},
-        {"name": "Notes", "value": db.query(func.count(Note.id)).scalar() or 0},
-        {"name": "Transactions", "value": db.query(func.count(Transaction.id)).scalar() or 0}
-    ]
+    results = []
+    for name, col in [
+        ("Tasks", "tasks"),
+        ("Habits", "habits"),
+        ("Goals", "goals"),
+        ("Notes", "notes"),
+        ("Transactions", "transactions"),
+    ]:
+        count = 0
+        try:
+            agg = db.collection_group(col).count(alias="total").get()
+            count = agg[0][0].value
+        except Exception:
+            count = 0
+        results.append({"name": name, "value": count})
 
+    return results

@@ -1,16 +1,12 @@
 fastapi
 uvicorn
-sqlalchemy
-psycopg2-binary
 pydantic
 pydantic-settings
-supabase
 python-jose[cryptography]
 bcrypt==3.2.2
 passlib[bcrypt]
 python-multipart
 slowapi
-alembic
 boto3
 firebase-admin
 openai

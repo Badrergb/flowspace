@@ -1,14 +1,10 @@
 from fastapi import FastAPI
-from sqlalchemy import text
+import logging
 
 from app.core.config import settings
-from app.db.database import engine
+from app.db.database import initialize_firebase  # ensures Firebase is initialized at startup
 from app.api.v1 import auth, sync, backup, entities, social, media, devices, ai, user, reviews, admin, study, finance
 from app.core.rate_limit import setup_rate_limiting
-import logging
-import json
-import firebase_admin
-from firebase_admin import credentials
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,23 +18,6 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.0.0",
 )
-
-if settings.FIREBASE_CREDENTIALS_JSON:
-    try:
-        # Clean up common copy-paste errors
-        raw_json = settings.FIREBASE_CREDENTIALS_JSON
-        if raw_json.startswith("'") and raw_json.endswith("'"):
-            raw_json = raw_json[1:-1]
-        
-        cred_dict = json.loads(raw_json)
-        if 'private_key' in cred_dict:
-            cred_dict['private_key'] = cred_dict['private_key'].replace('\\n', '\n')
-            
-        cred = credentials.Certificate(cred_dict)
-        firebase_admin.initialize_app(cred)
-        logging.info("Firebase Admin initialized successfully.")
-    except Exception as e:
-        logging.error(f"Failed to initialize Firebase Admin: {e}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,6 +43,7 @@ app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(study.router, prefix="/api/v1/study", tags=["study"])
 app.include_router(finance.router, prefix="/api/v1/finance", tags=["finance"])
 
+
 @app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {
@@ -71,20 +51,12 @@ def root():
         "status": "running",
     }
 
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
-    try:
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-
-        return {
-            "status": "healthy",
-            "database": "Connected"
-        }
-
-    except Exception as e:
-        logging.error(f"Database health check failed: {e}")
-        return {
-            "status": "unhealthy",
-            "database": "Database connection failed"
-        }
+    import firebase_admin
+    firebase_status = "initialized" if firebase_admin._apps else "not initialized"
+    return {
+        "status": "healthy",
+        "firebase": firebase_status,
+    }

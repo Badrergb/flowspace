@@ -4,13 +4,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "FlowSpace Backend"
 
-    DATABASE_URL: str = "sqlite:///./test.db"
-    DIRECT_URL: str = "sqlite:///./test.db"
-
-    SUPABASE_URL: str = "https://mock.supabase.co"
-    SUPABASE_ANON_KEY: str = "mock-key"
-    SUPABASE_SERVICE_ROLE_KEY: str = "mock-key"
-
     FIREBASE_CREDENTIALS_JSON: str = ""
 
     ALLOWED_ORIGINS: str = "*"

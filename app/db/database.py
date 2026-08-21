@@ -1,27 +1,34 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+import json
+import firebase_admin
+from firebase_admin import credentials, firestore
 from app.core.config import settings
 
-from app.core.config import settings
+def initialize_firebase():
+    if not firebase_admin._apps:
+        if settings.FIREBASE_CREDENTIALS_JSON:
+            try:
+                raw_json = settings.FIREBASE_CREDENTIALS_JSON
+                if raw_json.startswith("'") and raw_json.endswith("'"):
+                    raw_json = raw_json[1:-1]
+                
+                cred_dict = json.loads(raw_json)
+                if 'private_key' in cred_dict:
+                    cred_dict['private_key'] = cred_dict['private_key'].replace('\\n', '\n')
+                    
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred)
+            except Exception as e:
+                print(f"Failed to initialize Firebase Admin: {e}")
+        else:
+            print("FIREBASE_CREDENTIALS_JSON is not set.")
 
-db_url = settings.DATABASE_URL.replace("?pgbouncer=true", "")
-engine = create_engine(
-    db_url,
-    pool_pre_ping=True,
-)
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine,
-)
-
-Base = declarative_base()
-
+initialize_firebase()
 
 def get_db():
-    db = SessionLocal()
+    # Return a Firestore client instance
     try:
+        db = firestore.client()
         yield db
-    finally:
-        db.close()
+    except Exception as e:
+        print(f"Failed to get Firestore client: {e}")
+        yield None
