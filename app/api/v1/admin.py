@@ -35,11 +35,20 @@ def get_admin_kpis(
 
     # Count total tasks using Firestore collection group query
     total_tasks = 0
+    total_documents = 0
     try:
         tasks_query = db.collection_group("tasks")
         agg_query = tasks_query.count(alias="total")
         result = agg_query.get()
         total_tasks = result[0][0].value
+        total_documents += total_tasks
+        
+        for col in ["habits", "goals", "notes", "journals", "calendar_events", "transactions"]:
+            try:
+                res = db.collection_group(col).count(alias="total").get()
+                total_documents += res[0][0].value
+            except Exception:
+                pass
     except Exception:
         total_tasks = 0
 
@@ -47,6 +56,7 @@ def get_admin_kpis(
         "total_users": total_users,
         "active_users": total_users,  # Firebase Auth doesn't track this separately
         "total_tasks": total_tasks,
+        "total_documents": total_documents,
         "mrr": 0.0,
     }
 
