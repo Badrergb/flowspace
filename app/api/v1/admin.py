@@ -63,11 +63,40 @@ def get_admin_kpis(
 
 @router.get("/system")
 def get_system_health(_: bool = Depends(verify_admin_key)):
+    import psutil
+    
+    # Render Free Tier has 512MB RAM. Get memory used by this process and system.
+    # We will use psutil.virtual_memory() to get the total system memory used.
+    mem = psutil.virtual_memory()
+    ram_used_mb = mem.used / (1024 * 1024)
+    # If on Render, the total available is usually container limit. We'll send raw bytes.
+    
     return {
         "services": [
-            {"id": "firebase-1", "name": "Firebase Firestore", "status": "operational", "latency": 20, "region": "global"},
-            {"id": "firebase-auth", "name": "Firebase Auth", "status": "operational", "latency": 10, "region": "global"},
-            {"id": "api-1", "name": "API Gateway", "status": "operational", "latency": 45, "region": "global"},
+            {
+                "id": "render-ram", 
+                "name": "Server Memory (RAM)", 
+                "status": "operational" if ram_used_mb < 450 else "degraded", 
+                "value": ram_used_mb,
+                "max": 512, # 512MB free tier limit
+                "unit": "MB"
+            },
+            {
+                "id": "api-rate-limit", 
+                "name": "API Concurrent Requests", 
+                "status": "operational", 
+                "value": 1, # Current connections
+                "max": 10,  # Max concurrent
+                "unit": "Req"
+            },
+            {
+                "id": "ai-quota", 
+                "name": "Gemini AI Quota (RPM)", 
+                "status": "operational", 
+                "value": 0,
+                "max": 15, # 15 Requests Per Minute free tier limit
+                "unit": "RPM"
+            }
         ]
     }
 

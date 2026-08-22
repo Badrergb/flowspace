@@ -10,3 +10,4 @@ slowapi
 boto3
 firebase-admin
 openai
+psutil
