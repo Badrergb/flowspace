@@ -64,12 +64,13 @@ def get_admin_kpis(
 @router.get("/system")
 def get_system_health(_: bool = Depends(verify_admin_key)):
     import psutil
+    import os
     
-    # Render Free Tier has 512MB RAM. Get memory used by this process and system.
-    # We will use psutil.virtual_memory() to get the total system memory used.
-    mem = psutil.virtual_memory()
-    ram_used_mb = mem.used / (1024 * 1024)
-    # If on Render, the total available is usually container limit. We'll send raw bytes.
+    # psutil.virtual_memory() often returns the host node's total RAM (e.g., 16GB).
+    # To get the exact RAM used by your specific Render container/app, we measure 
+    # the Resident Set Size (RSS) of the current Python process.
+    process = psutil.Process(os.getpid())
+    ram_used_mb = process.memory_info().rss / (1024 * 1024)
     
     return {
         "services": [
