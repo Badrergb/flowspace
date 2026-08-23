@@ -198,15 +198,13 @@ def get_messages(
         .document(thread_id)
         .collection("messages")
         .order_by("created_at", direction="DESCENDING")
-        .limit(limit)
+        .limit(limit + skip)
         .stream()
     )
     results = []
-    for i, doc in enumerate(docs):
-        if i < skip:
-            continue
+    for doc in docs:
         d = doc.to_dict()
         if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
             d["created_at"] = d["created_at"].isoformat()
         results.append(d)
-    return results
+    return results[skip:skip + limit]

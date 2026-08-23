@@ -53,17 +53,15 @@ def get_reviews(
         db.collection("reviews")
         .where("is_approved", "==", True)
         .order_by("created_at", direction="DESCENDING")
-        .limit(limit)
+        .limit(limit + skip)
         .stream()
     )
     results = []
-    for i, doc in enumerate(docs):
-        if i < skip:
-            continue
+    for doc in docs:
         d = doc.to_dict()
         d["id"] = doc.id
         if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
             d["created_at"] = d["created_at"].isoformat()
         results.append(d)
 
-    return results
+    return results[skip:skip + limit]
