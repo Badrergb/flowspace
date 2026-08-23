@@ -31,4 +31,5 @@ def get_db():
         yield db
     except Exception as e:
         print(f"Failed to get Firestore client: {e}")
-        yield None
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=f"Database connection error: {str(e)}")

@@ -56,8 +56,11 @@ def check_and_increment_quota(db, user_id):
 
         if doc.exists:
             data = doc.to_dict()
-            reset_at = data.get("ai_quota_reset_at", today_str)
-            requests_used = data.get("ai_requests_used", 0)
+            reset_at = str(data.get("ai_quota_reset_at", today_str))
+            try:
+                requests_used = int(data.get("ai_requests_used", 0))
+            except (ValueError, TypeError):
+                requests_used = 0
 
             if reset_at < today_str:
                 requests_used = 0

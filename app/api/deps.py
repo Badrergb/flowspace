@@ -31,20 +31,24 @@ def get_current_user(
         raise credentials_exception
 
     # Fetch or auto-create the user document in Firestore
-    user_ref = db.collection("users").document(uid)
-    user_doc = user_ref.get()
+    try:
+        user_ref = db.collection("users").document(uid)
+        user_doc = user_ref.get()
 
-    if not user_doc.exists:
-        user_data = {
-            "uid": uid,
-            "email": email,
-            "full_name": name,
-            "is_active": True,
-        }
-        user_ref.set(user_data)
-    else:
-        user_data = user_doc.to_dict()
-        user_data["uid"] = uid
+        if not user_doc.exists:
+            user_data = {
+                "uid": uid,
+                "email": email,
+                "full_name": name,
+                "is_active": True,
+            }
+            user_ref.set(user_data)
+        else:
+            user_data = user_doc.to_dict()
+            user_data["uid"] = uid
+    except Exception as e:
+        print(f"Firestore error in get_current_user: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error during authentication: {str(e)}")
 
     if not user_data.get("is_active", True):
         raise HTTPException(status_code=400, detail="Inactive user")
