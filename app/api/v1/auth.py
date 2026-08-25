@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from firebase_admin import auth as firebase_auth
 from app.core.rate_limit import limiter
+from app.services.email_service import send_welcome_email
 
 router = APIRouter()
 
@@ -34,6 +35,10 @@ def register(request: Request, data: RegisterRequest):
         raise HTTPException(status_code=400, detail="The user with this email already exists.")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Send welcome email in the background (non-blocking — won't fail registration)
+    first_name = (data.full_name or data.email.split("@")[0]).split()[0]
+    send_welcome_email(to_email=data.email, first_name=first_name)
 
     return {
         "message": "User registered successfully. Please sign in via the app to get your token.",

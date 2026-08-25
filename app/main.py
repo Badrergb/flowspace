@@ -1,10 +1,12 @@
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
 import logging
 
 from app.core.config import settings
 from app.db.database import initialize_firebase  # ensures Firebase is initialized at startup
 from app.api.v1 import auth, sync, backup, entities, social, media, devices, ai, user, reviews, admin, study, finance
 from app.core.rate_limit import setup_rate_limiting
+from app.services.scheduler import start_scheduler, stop_scheduler
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,9 +16,19 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start background jobs on startup, stop them cleanly on shutdown."""
+    start_scheduler()
+    yield
+    stop_scheduler()
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
