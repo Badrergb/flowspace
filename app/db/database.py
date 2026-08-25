@@ -27,8 +27,7 @@ initialize_firebase()
 def get_db():
     # Return a Firestore client instance
     try:
-        db = firestore.client()
-        yield db
+        return firestore.client()
     except Exception as e:
         print(f"Failed to get Firestore client: {e}")
         from fastapi import HTTPException
