@@ -48,7 +48,8 @@ def register(request: Request, data: RegisterRequest):
 
 
 @router.post("/verify-token")
-def verify_token(data: LoginRequest):
+@limiter.limit("20/minute")
+def verify_token(request: Request, data: LoginRequest):
     """
     Verifies a Firebase ID token passed from the client.
     Returns basic user info. Use this to confirm a successful login.

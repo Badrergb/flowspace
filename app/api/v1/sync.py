@@ -1,5 +1,5 @@
 from typing import Optional, List
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 from pydantic import BaseModel
 from google.cloud.firestore_v1 import Client as FirestoreClient
 
@@ -42,6 +42,10 @@ def sync_upload(
     Also detects habit streak milestones and sends a celebration email.
     """
     uid = current_user["uid"]
+    
+    if len(payload.operations) > 500:
+        raise HTTPException(status_code=400, detail="Too many operations in a single sync request (max 500).")
+
     applied = 0
 
     for op in payload.operations:

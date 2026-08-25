@@ -1,5 +1,6 @@
 import logging
 import smtplib
+import html
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.core.config import settings
@@ -39,9 +40,10 @@ def _send_email_smtp(to_email: str, subject: str, html_content: str) -> None:
 # ─────────────────────────────────────────────
 def send_welcome_email(to_email: str, first_name: str) -> None:
     """Send a welcome email to a newly registered user."""
+    safe_first_name = html.escape(first_name)
     html_body = f"""
     <div style="font-family: sans-serif; color: #333; line-height: 1.8; max-width: 600px; margin: auto;">
-        <h2 style="color: #6C3CE1;">Hey {first_name}, welcome to FlowSpace! 🎉</h2>
+        <h2 style="color: #6C3CE1;">Hey {safe_first_name}, welcome to FlowSpace! 🎉</h2>
         <p>Oh wow, we are SO glad you are here! You just made one of the best decisions for yourself — and we genuinely mean that. 💜</p>
         <p>You've just taken your very first step toward building better habits, crushing your goals, and becoming the best version of yourself. And we are going to be right here cheering you on every single step of the way!</p>
         <p><strong>Here is what you can do in FlowSpace:</strong></p>
@@ -76,10 +78,11 @@ def send_welcome_email(to_email: str, first_name: str) -> None:
 # ─────────────────────────────────────────────
 def send_birthday_email(to_email: str, first_name: str) -> None:
     """Send a happy birthday email to a user."""
+    safe_first_name = html.escape(first_name)
     html_body = f"""
     <div style="font-family: sans-serif; color: #333; line-height: 1.8; max-width: 600px; margin: auto;">
-        <h2 style="color: #6C3CE1;">🎂 Happy Birthday, {first_name}! 🎉</h2>
-        <p>Hey {first_name},</p>
+        <h2 style="color: #6C3CE1;">🎂 Happy Birthday, {safe_first_name}! 🎉</h2>
+        <p>Hey {safe_first_name},</p>
         <p>The <strong>entire FlowSpace team</strong> wanted to stop everything we were doing today just to say — <strong>HAPPY BIRTHDAY!</strong> 🥳🎊</p>
         <p>We hope today is filled with so much joy, laughter, amazing food, and people who make you feel how truly special you are. You deserve an absolutely incredible day!</p>
         <p>Whether you're celebrating big or keeping it cozy and low-key today, just know that we are sending you so many warm wishes from our side of the screen. You have spent the past year showing up for yourself and building something amazing — and that is genuinely worth celebrating. 🌟</p>
@@ -108,12 +111,14 @@ def send_birthday_email(to_email: str, first_name: str) -> None:
 # ─────────────────────────────────────────────
 def send_streak_milestone_email(to_email: str, first_name: str, streak: int) -> None:
     """Send a celebration email when a user hits a habit streak milestone."""
+    safe_first_name = html.escape(first_name)
+    safe_streak = html.escape(str(streak))
     html_body = f"""
     <div style="font-family: sans-serif; color: #333; line-height: 1.8; max-width: 600px; margin: auto;">
-        <h2 style="color: #6C3CE1;">🔥 {streak} Days Strong, {first_name}! WOW!</h2>
-        <p>Hey {first_name},</p>
-        <p>We just saw your streak hit <strong>{streak} days</strong> and we had to stop what we were doing to say: <strong>INCREDIBLE! 🎉</strong></p>
-        <p>Do you realize what you just did? You showed up for yourself <strong>{streak} days in a row.</strong> That takes serious dedication, discipline, and a whole lot of heart. You should be SO proud of yourself right now — because we certainly are! 💜</p>
+        <h2 style="color: #6C3CE1;">🔥 {safe_streak} Days Strong, {safe_first_name}! WOW!</h2>
+        <p>Hey {safe_first_name},</p>
+        <p>We just saw your streak hit <strong>{safe_streak} days</strong> and we had to stop what we were doing to say: <strong>INCREDIBLE! 🎉</strong></p>
+        <p>Do you realize what you just did? You showed up for yourself <strong>{safe_streak} days in a row.</strong> That takes serious dedication, discipline, and a whole lot of heart. You should be SO proud of yourself right now — because we certainly are! 💜</p>
         <p>Most people give up before they ever get here. But not you. You kept going even on the days when it felt hard, even when you didn't feel like it — and that is exactly what separates people who dream from people who actually <em>do</em>. You are the latter. ✨</p>
         <p>Keep that incredible energy going today! Remember — even on your busiest days, showing up for just 1% is a massive win. You've got this!</p>
         <p style="background: #f5f0ff; padding: 14px; border-radius: 8px; border-left: 4px solid #6C3CE1;">
@@ -140,10 +145,11 @@ def send_streak_milestone_email(to_email: str, first_name: str, streak: int) -> 
 # ─────────────────────────────────────────────
 def send_reengagement_email(to_email: str, first_name: str) -> None:
     """Send a warm re-engagement email after 5 days of inactivity."""
+    safe_first_name = html.escape(first_name)
     html_body = f"""
     <div style="font-family: sans-serif; color: #333; line-height: 1.8; max-width: 600px; margin: auto;">
-        <h2 style="color: #6C3CE1;">Hey {first_name}, we've been thinking about you! 🌟</h2>
-        <p>Hey {first_name},</p>
+        <h2 style="color: #6C3CE1;">Hey {safe_first_name}, we've been thinking about you! 🌟</h2>
+        <p>Hey {safe_first_name},</p>
         <p>Sending you the warmest of greetings from the FlowSpace team! ☀️</p>
         <p>We noticed it's been a little while since you last logged a habit in the app, and we just wanted to drop in — not to pressure you, but simply to say: <strong>we are thinking about you, and we genuinely hope you're doing well!</strong> 💜</p>
         <p>Life gets busy. Schedules break. Sometimes we just need a rest. And that is <em>completely okay</em>. Please don't be hard on yourself about it — every single one of us has been there.</p>

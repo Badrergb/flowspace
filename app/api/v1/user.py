@@ -35,7 +35,9 @@ def _serialize_user(user_data: dict) -> dict:
 
 
 @router.get("/me")
+@limiter.limit("30/minute")
 def get_current_user_profile(
+    request: Request,
     db: FirestoreClient = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -50,7 +52,9 @@ def get_current_user_profile(
 
 
 @router.patch("/me/profile")
+@limiter.limit("15/minute")
 def update_user_profile(
+    request: Request,
     profile: UserProfileUpdate,
     db: FirestoreClient = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -78,17 +82,21 @@ def update_user_profile(
 
 # Keep the old POST /profile route as an alias for backward compatibility
 @router.post("/profile")
+@limiter.limit("15/minute")
 def update_user_profile_legacy(
+    request: Request,
     profile: UserProfileUpdate,
     db: FirestoreClient = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """Deprecated: Use PATCH /me/profile instead."""
-    return update_user_profile(profile, db, current_user)
+    return update_user_profile(request, profile, db, current_user)
 
 
 @router.get("/export")
+@limiter.limit("2/minute")
 def export_user_data(
+    request: Request,
     db: FirestoreClient = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -112,7 +120,9 @@ def export_user_data(
 
 
 @router.delete("/account")
+@limiter.limit("2/minute")
 def delete_user_account(
+    request: Request,
     db: FirestoreClient = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
