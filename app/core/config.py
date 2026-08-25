@@ -10,8 +10,8 @@ class Settings(BaseSettings):
 
     AI_DAILY_REQUEST_LIMIT: int = 10
 
-    RESEND_API_KEY: str = ""
-    EMAIL_SENDER: str = "FlowSpace <hello@flowspace.app>"
+    SMTP_EMAIL: str = ""
+    SMTP_PASSWORD: str = ""
 
     SECRET_KEY: str = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
     ADMIN_SECRET_KEY: str = "super-secret-admin-key-change-in-prod"
