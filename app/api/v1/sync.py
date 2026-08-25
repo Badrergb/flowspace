@@ -1,12 +1,12 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
-from typing import List, Optional
 from google.cloud.firestore_v1 import Client as FirestoreClient
 
 from app.db.database import get_db
 from app.api.deps import get_current_user
 from app.core.rate_limit import limiter
+from app.services.email_service import send_streak_milestone_email, MILESTONE_STREAKS
 
 router = APIRouter()
 
@@ -39,6 +39,7 @@ def sync_upload(
 ):
     """
     Receives local operations from a device and applies them to Firestore.
+    Also detects habit streak milestones and sends a celebration email.
     """
     uid = current_user["uid"]
     applied = 0
@@ -53,6 +54,31 @@ def sync_upload(
             elif op.operation == "update":
                 ref.set(op.data, merge=True)
             applied += 1
+
+            # ── Streak milestone detection ──────────────────────────────
+            # Sends a celebration email when a habit hits 7, 14, 21, 30,
+            # 60, 90, 180, or 365 days. Deduped via milestones_sent list.
+            if op.collection == "habits" and op.operation in ("set", "update"):
+                streak = op.data.get("current_streak")
+                if streak and isinstance(streak, int) and streak in MILESTONE_STREAKS:
+                    milestones_sent = current_user.get("milestones_sent", [])
+                    milestone_key = f"{op.document_id}_{streak}"
+                    if milestone_key not in milestones_sent:
+                        email = current_user.get("email")
+                        full_name = current_user.get("full_name", "") or ""
+                        first_name = full_name.split()[0] if full_name else "there"
+                        if email:
+                            send_streak_milestone_email(
+                                to_email=email,
+                                first_name=first_name,
+                                streak=streak,
+                            )
+                            milestones_sent.append(milestone_key)
+                            db.collection("users").document(uid).set(
+                                {"milestones_sent": milestones_sent}, merge=True
+                            )
+            # ────────────────────────────────────────────────────────────
+
         except Exception as e:
             print(f"Failed to apply op {op.document_id}: {e}")
 
