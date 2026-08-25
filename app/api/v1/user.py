@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from google.cloud.firestore_v1 import Client as FirestoreClient
 from firebase_admin import auth as firebase_auth
@@ -18,16 +19,45 @@ class UserProfileUpdate(BaseModel):
     full_name: Optional[str] = None
     phone_number: Optional[str] = None
     avatar_url: Optional[str] = None
+    birthday: Optional[datetime] = None
 
 
-@router.post("/profile")
+def _serialize_user(user_data: dict) -> dict:
+    """Convert Firestore Timestamps and datetime objects to ISO 8601 strings."""
+    result = {}
+    for key, value in user_data.items():
+        if hasattr(value, "isoformat"):
+            # Handles both Python datetime and Firestore DatetimeWithNanoseconds
+            result[key] = value.isoformat()
+        else:
+            result[key] = value
+    return result
+
+
+@router.get("/me")
+def get_current_user_profile(
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Returns the current user's full profile including birthday."""
+    uid = current_user["uid"]
+    user_doc = db.collection("users").document(uid).get()
+    if not user_doc.exists:
+        raise HTTPException(status_code=404, detail="User not found")
+    user_data = user_doc.to_dict()
+    user_data["uid"] = uid
+    return _serialize_user(user_data)
+
+
+@router.patch("/me/profile")
 def update_user_profile(
     profile: UserProfileUpdate,
     db: FirestoreClient = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    """Updates the current user's profile fields. Only provided fields are updated."""
     uid = current_user["uid"]
-    update_data = profile.dict(exclude_none=True)
+    update_data = profile.model_dump(exclude_none=True)
 
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -38,8 +68,23 @@ def update_user_profile(
         if existing:
             raise HTTPException(status_code=400, detail="Username is already taken")
 
-    db.collection("users").document(uid).update(update_data)
+    # Convert birthday datetime to ISO string for Firestore storage
+    if "birthday" in update_data and isinstance(update_data["birthday"], datetime):
+        update_data["birthday"] = update_data["birthday"].isoformat()
+
+    db.collection("users").document(uid).set(update_data, merge=True)
     return {"message": "Profile updated successfully"}
+
+
+# Keep the old POST /profile route as an alias for backward compatibility
+@router.post("/profile")
+def update_user_profile_legacy(
+    profile: UserProfileUpdate,
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Deprecated: Use PATCH /me/profile instead."""
+    return update_user_profile(profile, db, current_user)
 
 
 @router.get("/export")
@@ -58,7 +103,7 @@ def export_user_data(
         "habit_logs", "goal_progress", "workout_sets",
     ]
 
-    data = {"user": current_user}
+    data = {"user": _serialize_user(current_user)}
     for col in collections:
         docs = user_ref.collection(col).stream()
         data[col] = [{**doc.to_dict(), "id": doc.id} for doc in docs]
@@ -100,3 +145,5 @@ def delete_user_account(
         raise HTTPException(status_code=500, detail=f"Error deleting account: {str(e)}")
 
     return {"message": "Account successfully purged"}
+
+
