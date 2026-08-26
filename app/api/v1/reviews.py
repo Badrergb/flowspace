@@ -49,19 +49,26 @@ def get_reviews(
     limit: int = Query(100, ge=1, le=1000),
     db: FirestoreClient = Depends(get_db),
 ):
-    docs = (
-        db.collection("reviews")
-        .where("is_approved", "==", True)
-        .order_by("created_at", direction="DESCENDING")
-        .limit(limit + skip)
-        .stream()
-    )
-    results = []
-    for doc in docs:
-        d = doc.to_dict()
-        d["id"] = doc.id
-        if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
-            d["created_at"] = d["created_at"].isoformat()
-        results.append(d)
-
-    return results[skip:skip + limit]
+    # Fetch all approved reviews and sort in memory to avoid 
+    # requiring a manual Firestore composite index for new deployments.
+    try:
+        docs = (
+            db.collection("reviews")
+            .where("is_approved", "==", True)
+            .stream()
+        )
+        
+        results = []
+        for doc in docs:
+            d = doc.to_dict()
+            d["id"] = doc.id
+            if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
+                d["created_at"] = d["created_at"].isoformat()
+            results.append(d)
+            
+        # Sort descending by created_at
+        results.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+        
+        return results[skip:skip + limit]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
