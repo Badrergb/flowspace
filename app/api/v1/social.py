@@ -47,6 +47,8 @@ def send_friend_request_by_username(
     if not results:
         results = db.collection("users").where("email", "==", req.username).limit(1).get()
     if not results:
+        results = db.collection("users").where("full_name", "==", req.username).limit(1).get()
+    if not results:
         raise HTTPException(status_code=404, detail="User not found")
 
     target_doc = results[0]
