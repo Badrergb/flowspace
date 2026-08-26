@@ -64,3 +64,18 @@ def verify_token(request: Request, data: LoginRequest):
         "email": decoded.get("email"),
         "name": decoded.get("name"),
     }
+
+
+class WelcomeEmailRequest(BaseModel):
+    email: str
+    first_name: str
+
+@router.post("/trigger-welcome")
+@limiter.limit("5/minute")
+def trigger_welcome(request: Request, data: WelcomeEmailRequest):
+    """
+    Dedicated endpoint for the frontend to trigger the welcome email 
+    after creating a user directly via the Firebase Client SDK.
+    """
+    send_welcome_email(to_email=data.email, first_name=data.first_name)
+    return {"message": "Welcome email triggered successfully"}
