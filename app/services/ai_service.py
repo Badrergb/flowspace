@@ -26,6 +26,34 @@ def _get_client():
         return None
     return client
 
+_cached_model = None
+
+def _get_active_model() -> str:
+    global _cached_model
+    if _cached_model:
+        return _cached_model
+    
+    try:
+        import requests
+        headers = {"Authorization": f"Bearer {os.environ.get('GROQ_API_KEY')}"}
+        resp = requests.get("https://api.groq.com/openai/v1/models", headers=headers)
+        if resp.status_code == 200:
+            models = resp.json().get("data", [])
+            for m in models:
+                model_id = m.get("id", "")
+                if "llama" in model_id.lower() or "mixtral" in model_id.lower() or "gemma" in model_id.lower():
+                    _cached_model = model_id
+                    return _cached_model
+            
+            # If no llama/mixtral, just pick the first one
+            if models:
+                _cached_model = models[0].get("id")
+                return _cached_model
+    except Exception as e:
+        logger.error(f"Failed to fetch dynamic model: {e}")
+        
+    return "llama-3.3-70b-versatile"
+
 def _check_ai_enabled(db, user_id) -> bool:
     try:
         settings_doc = (
@@ -108,7 +136,7 @@ def categorize_transactions(transactions: list, db, user_id) -> dict:
 
     try:
         response = ai_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=_get_active_model(),
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
@@ -162,7 +190,7 @@ def generate_weekly_review(db, user_id) -> str:
 
     try:
         response = ai_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=_get_active_model(),
             messages=[{"role": "user", "content": prompt}]
         )
         return response.choices[0].message.content.strip()
@@ -195,7 +223,7 @@ def chat_with_data(query: str, db, user_id) -> str:
 
     try:
         response = ai_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=_get_active_model(),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": query}
