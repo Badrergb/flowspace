@@ -40,15 +40,22 @@ def _get_active_model() -> str:
         if resp.status_code == 200:
             models = resp.json().get("data", [])
             for m in models:
-                model_id = m.get("id", "")
-                if "llama" in model_id.lower() or "mixtral" in model_id.lower() or "gemma" in model_id.lower():
-                    _cached_model = model_id
+                model_id = m.get("id", "").lower()
+                
+                # Skip moderation, vision, and audio models
+                if "guard" in model_id or "whisper" in model_id or "vision" in model_id:
+                    continue
+                    
+                if "llama" in model_id or "mixtral" in model_id or "gemma" in model_id:
+                    _cached_model = m.get("id")
                     return _cached_model
             
-            # If no llama/mixtral, just pick the first one
-            if models:
-                _cached_model = models[0].get("id")
-                return _cached_model
+            # If no generation models found, just pick the first non-guard one
+            for m in models:
+                model_id = m.get("id", "").lower()
+                if "guard" not in model_id and "whisper" not in model_id:
+                    _cached_model = m.get("id")
+                    return _cached_model
     except Exception as e:
         logger.error(f"Failed to fetch dynamic model: {e}")
         
