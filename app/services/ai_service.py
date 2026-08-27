@@ -27,8 +27,8 @@ def _get_client():
     return client
 
 def _get_active_model() -> str:
-    # We will use Groq's standard unlocked model now that the user has a normal API key.
-    return "llama-3.1-8b-instant"
+    # Use a model that actually exists in the user's specific console
+    return "openai/gpt-oss-120b"
 
 def _check_ai_enabled(db, user_id) -> bool:
     try:
