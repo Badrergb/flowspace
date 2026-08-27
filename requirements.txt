@@ -9,6 +9,7 @@ python-multipart
 slowapi
 boto3
 firebase-admin
+google-cloud-firestore>=2.40.0
 openai
 psutil
 apscheduler
