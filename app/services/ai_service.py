@@ -108,7 +108,7 @@ def categorize_transactions(transactions: list, db, user_id) -> dict:
 
     try:
         response = ai_client.chat.completions.create(
-            model="llama-3.1-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
@@ -162,7 +162,7 @@ def generate_weekly_review(db, user_id) -> str:
 
     try:
         response = ai_client.chat.completions.create(
-            model="llama-3.1-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}]
         )
         return response.choices[0].message.content.strip()
@@ -195,7 +195,7 @@ def chat_with_data(query: str, db, user_id) -> str:
 
     try:
         response = ai_client.chat.completions.create(
-            model="llama-3.1-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": query}
