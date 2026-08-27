@@ -26,39 +26,8 @@ def _get_client():
         return None
     return client
 
-_cached_model = None
-
 def _get_active_model() -> str:
-    global _cached_model
-    if _cached_model:
-        return _cached_model
-    
-    try:
-        import requests
-        headers = {"Authorization": f"Bearer {os.environ.get('GROQ_API_KEY')}"}
-        resp = requests.get("https://api.groq.com/openai/v1/models", headers=headers)
-        if resp.status_code == 200:
-            models = resp.json().get("data", [])
-            for m in models:
-                model_id = m.get("id", "").lower()
-                
-                # Skip moderation, vision, and audio models
-                if "guard" in model_id or "whisper" in model_id or "vision" in model_id:
-                    continue
-                    
-                if "llama" in model_id or "mixtral" in model_id or "gemma" in model_id:
-                    _cached_model = m.get("id")
-                    return _cached_model
-            
-            # If no generation models found, just pick the first non-guard one
-            for m in models:
-                model_id = m.get("id", "").lower()
-                if "guard" not in model_id and "whisper" not in model_id:
-                    _cached_model = m.get("id")
-                    return _cached_model
-    except Exception as e:
-        logger.error(f"Failed to fetch dynamic model: {e}")
-        
+    # We will use Groq's current flagship model.
     return "llama-3.3-70b-versatile"
 
 def _check_ai_enabled(db, user_id) -> bool:
@@ -238,5 +207,8 @@ def chat_with_data(query: str, db, user_id) -> str:
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
+        error_str = str(e).lower()
+        if "terms" in error_str or "model_not_found" in error_str or "does not exist" in error_str or "decommissioned" in error_str:
+            return "Setup Required: Please log into the Groq Playground (https://console.groq.com/playground) and accept the Terms of Service to enable the AI."
         logger.error(f"Failed to chat via AI: {e}")
         return f"AI Connection Error: {str(e)}"
