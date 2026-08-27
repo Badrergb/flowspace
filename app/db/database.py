@@ -19,8 +19,10 @@ def initialize_firebase():
                 firebase_admin.initialize_app(cred)
             except Exception as e:
                 print(f"Failed to initialize Firebase Admin: {e}")
+                raise RuntimeError(f"FATAL: Firebase Admin SDK failed to initialize. Check FIREBASE_CREDENTIALS_JSON format. Error: {e}")
         else:
             print("FIREBASE_CREDENTIALS_JSON is not set.")
+            raise RuntimeError("FATAL: FIREBASE_CREDENTIALS_JSON environment variable is missing.")
 
 initialize_firebase()
 
