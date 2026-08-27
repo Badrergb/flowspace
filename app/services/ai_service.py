@@ -27,8 +27,8 @@ def _get_client():
     return client
 
 def _get_active_model() -> str:
-    # We must use the only model available to the user's API key
-    return "canopylabs/orpheus-arabic-saudi"
+    # We will use Groq's standard unlocked model now that the user has a normal API key.
+    return "llama-3.1-8b-instant"
 
 def _check_ai_enabled(db, user_id) -> bool:
     try:
