@@ -13,6 +13,7 @@ router = APIRouter()
 
 
 @router.post("")
+@router.post("/")
 @limiter.limit("3/hour")
 async def create_review(
     request: Request,
@@ -44,6 +45,7 @@ async def create_review(
 
 
 @router.get("")
+@router.get("/")
 def get_reviews(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
