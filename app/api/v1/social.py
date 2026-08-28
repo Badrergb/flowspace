@@ -72,30 +72,91 @@ def send_friend_request_by_username(
     return {"id": friendship_id, "status": "pending"}
 
 
-@router.post("/friends/accept")
-def accept_friend_request(
-    req: FriendRequestById,
+@router.get("/friends/requests/pending")
+def get_pending_requests(
     db: FirestoreClient = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     uid = current_user["uid"]
-    friendship_id = f"{req.friend_id}_{uid}"
-    ref = db.collection("friendships").document(friendship_id)
+    
+    # Incoming pending requests
+    incoming_docs = db.collection("friendships").where("friend_id", "==", uid).where("status", "==", "pending").stream()
+    
+    results = []
+    for doc in incoming_docs:
+        d = doc.to_dict()
+        sender_id = d.get("user_id")
+        sender_name = "Unknown"
+        if sender_id:
+            sender_doc = db.collection("users").document(sender_id).get()
+            if sender_doc.exists:
+                sender_data = sender_doc.to_dict()
+                sender_name = sender_data.get("full_name") or sender_data.get("username") or "Unknown"
+                
+        results.append({
+            "id": doc.id,
+            "sender_name": sender_name,
+            "sender_id": sender_id,
+            "created_at": d.get("created_at").isoformat() if hasattr(d.get("created_at"), "isoformat") else None
+        })
+    return results
+
+@router.post("/friends/request/{id}/accept")
+def accept_friend_request_by_id(
+    id: str,
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
+    ref = db.collection("friendships").document(id)
     doc = ref.get()
-
-    if not doc.exists or doc.to_dict().get("status") != "pending":
+    
+    if not doc.exists:
         raise HTTPException(status_code=404, detail="Friend request not found")
-
+        
+    data = doc.to_dict()
+    if data.get("friend_id") != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to accept this request")
+        
+    if data.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Request is not pending")
+        
     ref.update({"status": "accepted"})
+    
     # Create reciprocal
-    db.collection("friendships").document(f"{uid}_{req.friend_id}").set({
-        "id": f"{uid}_{req.friend_id}",
+    sender_id = data.get("user_id")
+    reciprocal_id = f"{uid}_{sender_id}"
+    db.collection("friendships").document(reciprocal_id).set({
+        "id": reciprocal_id,
         "user_id": uid,
-        "friend_id": req.friend_id,
+        "friend_id": sender_id,
         "status": "accepted",
         "created_at": firestore.SERVER_TIMESTAMP,
     })
     return {"message": "Friend request accepted"}
+
+@router.post("/friends/request/{id}/decline")
+def decline_friend_request_by_id(
+    id: str,
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
+    ref = db.collection("friendships").document(id)
+    doc = ref.get()
+    
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+        
+    data = doc.to_dict()
+    if data.get("friend_id") != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to decline this request")
+        
+    if data.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Request is not pending")
+        
+    ref.delete()
+    return {"message": "Friend request declined"}
 
 
 @router.get("/friends")
