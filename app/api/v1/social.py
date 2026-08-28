@@ -104,8 +104,30 @@ def get_friends(
     current_user: dict = Depends(get_current_user),
 ):
     uid = current_user["uid"]
-    docs = db.collection("friendships").where("user_id", "==", uid).stream()
-    return [{**doc.to_dict(), "id": doc.id} for doc in docs]
+    
+    # Fetch outgoing requests (where current user is the sender)
+    outgoing_docs = db.collection("friendships").where("user_id", "==", uid).stream()
+    
+    # Fetch incoming requests (where current user is the receiver)
+    incoming_docs = db.collection("friendships").where("friend_id", "==", uid).stream()
+    
+    friends_list = []
+    
+    # Add outgoing requests
+    for doc in outgoing_docs:
+        d = doc.to_dict()
+        d["id"] = doc.id
+        d["direction"] = "outgoing"
+        friends_list.append(d)
+        
+    # Add incoming requests
+    for doc in incoming_docs:
+        d = doc.to_dict()
+        d["id"] = doc.id
+        d["direction"] = "incoming"
+        friends_list.append(d)
+        
+    return friends_list
 
 
 # --- Feed ---
