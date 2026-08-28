@@ -112,17 +112,26 @@ def get_friends(
     incoming_docs = db.collection("friendships").where("friend_id", "==", uid).stream()
     
     friends_list = []
+    seen_accepted = set()
     
     # Add outgoing requests
     for doc in outgoing_docs:
         d = doc.to_dict()
         d["id"] = doc.id
         d["direction"] = "outgoing"
+        if d.get("status") == "accepted":
+            seen_accepted.add(d.get("friend_id"))
         friends_list.append(d)
         
     # Add incoming requests
     for doc in incoming_docs:
         d = doc.to_dict()
+        friend_target = d.get("user_id") # For incoming, the other person is the user_id
+        
+        # Skip duplicate accepted friends (already added from outgoing)
+        if d.get("status") == "accepted" and friend_target in seen_accepted:
+            continue
+            
         d["id"] = doc.id
         d["direction"] = "incoming"
         friends_list.append(d)
@@ -167,10 +176,11 @@ def get_feed(
 
     # Fetch public posts from friends + own posts
     posts = []
+    # Avoid limiting the DB query before filtering, otherwise we might miss friend posts 
+    # if there are many recent posts from non-friends.
     docs = (
         db.collection("feed_posts")
         .order_by("created_at", direction="DESCENDING")
-        .limit(limit + skip)
         .stream()
     )
     for doc in docs:
@@ -179,6 +189,9 @@ def get_feed(
             if d.get("created_at") and hasattr(d["created_at"], "isoformat"):
                 d["created_at"] = d["created_at"].isoformat()
             posts.append(d)
+            # Stop memory loop once we satisfy the pagination requirements
+            if len(posts) >= limit + skip:
+                break
 
     return posts[skip:skip + limit]
 
