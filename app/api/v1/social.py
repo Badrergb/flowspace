@@ -197,6 +197,29 @@ def get_friends(
         d["direction"] = "incoming"
         friends_list.append(d)
         
+    # Collect all unique friend UIDs we need to fetch profiles for
+    friend_uids = set()
+    for f in friends_list:
+        other_uid = f.get("friend_id") if f["direction"] == "outgoing" else f.get("user_id")
+        f["_other_uid"] = other_uid
+        if other_uid:
+            friend_uids.add(other_uid)
+            
+    # Fetch user profiles
+    user_profiles = {}
+    for other_uid in friend_uids:
+        u_doc = db.collection("users").document(other_uid).get()
+        if u_doc.exists:
+            user_profiles[other_uid] = u_doc.to_dict()
+            
+    # Inject profile details into the response
+    for f in friends_list:
+        other_uid = f.pop("_other_uid", None)
+        profile = user_profiles.get(other_uid, {})
+        f["friend_name"] = profile.get("full_name") or profile.get("username") or "Unknown"
+        f["friend_avatar"] = profile.get("avatar_url")
+        f["streak"] = profile.get("streak", 0)
+        
     return friends_list
 
 
