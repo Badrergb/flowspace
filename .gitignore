@@ -22,3 +22,5 @@ __pycache__/
 .gemini/
 .system_generated/
 scratch/
+testsprite_tests/tmp/
+testsprite_tests/tmp/config.json

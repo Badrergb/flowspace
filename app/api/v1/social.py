@@ -180,6 +180,39 @@ def decline_friend_request_by_id(
     ref.delete()
     return {"message": "Friend request declined"}
 
+@router.post("/friends/request/{id}/revoke")
+def revoke_friend_request_by_id(
+    id: str,
+    db: FirestoreClient = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    uid = current_user["uid"]
+    
+    # The frontend might send the friend's UID instead of the friendship document ID
+    # If it's a friend UID, our outgoing request doc ID is f"{uid}_{id}"
+    doc_id = id
+    ref = db.collection("friendships").document(doc_id)
+    doc = ref.get()
+    
+    if not doc.exists:
+        doc_id = f"{uid}_{id}"
+        ref = db.collection("friendships").document(doc_id)
+        doc = ref.get()
+        
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+        
+    data = doc.to_dict()
+    # The sender (user_id) is the only one authorized to revoke their outgoing request
+    if data.get("user_id") != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to revoke this request")
+        
+    if data.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Request is not pending")
+        
+    ref.delete()
+    return {"message": "Friend request revoked"}
+
 
 @router.get("/friends")
 def get_friends(
