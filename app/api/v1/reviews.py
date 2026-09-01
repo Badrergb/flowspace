@@ -74,3 +74,42 @@ def get_reviews(
         return results[skip:skip + limit]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+from fastapi.responses import StreamingResponse
+import io
+import csv
+
+@router.get("/export/csv")
+def export_reviews_csv(db: FirestoreClient = Depends(get_db)):
+    try:
+        docs = db.collection("reviews").stream()
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["ID", "Name", "Rating", "Review Text", "Approved", "Created At"])
+        
+        for doc in docs:
+            d = doc.to_dict()
+            created_at = d.get("created_at")
+            if created_at and hasattr(created_at, "isoformat"):
+                created_at = created_at.isoformat()
+            else:
+                created_at = str(created_at) if created_at else ""
+                
+            writer.writerow([
+                doc.id,
+                d.get("name", ""),
+                d.get("rating", ""),
+                d.get("review_text", ""),
+                d.get("is_approved", False),
+                created_at
+            ])
+            
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=reviews_export.csv"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

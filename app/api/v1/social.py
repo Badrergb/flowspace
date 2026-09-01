@@ -59,8 +59,30 @@ def send_friend_request_by_username(
 
     friendship_id = f"{uid}_{target_uid}"
     existing = db.collection("friendships").document(friendship_id).get()
+    
     if existing.exists:
-        raise HTTPException(status_code=400, detail="Friend request already sent")
+        data = existing.to_dict()
+        if data.get("status") == "accepted":
+            raise HTTPException(status_code=400, detail="You are already friends")
+        
+        # Check if it was sent within the last hour
+        from datetime import datetime, timezone, timedelta
+        created_at = data.get("created_at")
+        
+        # created_at can be a datetime or Timestamp
+        if created_at:
+            if hasattr(created_at, "timestamp"):
+                # Google Cloud DatetimeWithNanoseconds
+                sent_time = created_at
+            else:
+                sent_time = created_at # fallback
+                
+            try:
+                if (datetime.now(timezone.utc) - sent_time) < timedelta(hours=1):
+                    raise HTTPException(status_code=400, detail="Request already sent. Please wait 1 hour before resending.")
+            except:
+                # If type error comparing times, just reject it to be safe
+                raise HTTPException(status_code=400, detail="Friend request already sent recently.")
 
     db.collection("friendships").document(friendship_id).set({
         "id": friendship_id,
@@ -216,7 +238,7 @@ def get_friends(
     for f in friends_list:
         other_uid = f.pop("_other_uid", None)
         profile = user_profiles.get(other_uid, {})
-        f["friend_name"] = profile.get("full_name") or profile.get("username") or "Unknown"
+        f["friend_name"] = profile.get("username") or profile.get("full_name") or "Unknown"
         f["friend_avatar"] = profile.get("avatar_url")
         f["streak"] = profile.get("streak", 0)
         
