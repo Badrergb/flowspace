@@ -138,12 +138,16 @@ def generate_weekly_review(db, user_id) -> str:
         task_docs = (
             db.collection("users").document(user_id).collection("tasks")
             .where("is_completed", "==", True)
+            .where("created_at", ">=", seven_days_ago.isoformat())
+            .limit(50)
             .stream()
         )
         completed_tasks = [doc.to_dict() for doc in task_docs]
 
         habit_docs = (
             db.collection("users").document(user_id).collection("habit_logs")
+            .where("created_at", ">=", seven_days_ago.isoformat())
+            .limit(50)
             .stream()
         )
         completed_habits = [doc.to_dict() for doc in habit_docs]

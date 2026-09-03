@@ -28,7 +28,12 @@ def run_birthday_job() -> None:
         db = get_db()
         sent_count = 0
 
-        for doc in db.collection("users").stream():
+        # We can't query by birthday (which is a full date string) directly to find today's month/day easily without a composite field.
+        # But to prevent downloading 10,000+ users, we should use a projection or just fetch active users.
+        # As a safe optimization, we will limit to users active in the last 30 days if possible.
+        # For now, we will stream users but ONLY fetch 'email', 'birthday', 'full_name', 'last_birthday_wish_year'.
+        
+        for doc in db.collection("users").select(["email", "birthday", "full_name", "last_birthday_wish_year"]).stream():
             user = doc.to_dict()
             uid = doc.id
             email = user.get("email")
@@ -79,7 +84,8 @@ def run_reengagement_job() -> None:
         db = get_db()
         sent_count = 0
 
-        for doc in db.collection("users").stream():
+        # Only select necessary fields to save memory and network egress.
+        for doc in db.collection("users").select(["email", "full_name", "last_reengagement_sent_at"]).stream():
             user = doc.to_dict()
             uid = doc.id
             email = user.get("email")
