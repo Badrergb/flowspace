@@ -41,6 +41,10 @@ app.add_middleware(
 
 setup_rate_limiting(app)
 
+from app.api.v1 import auth, sync, backup, entities, social, media, devices, ai, user, reviews, admin, study, finance, stats
+
+# ... setup ...
+
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(sync.router, prefix="/api/v1/sync", tags=["sync"])
 app.include_router(backup.router, prefix="/api/v1/backup", tags=["backup"])
@@ -54,6 +58,7 @@ app.include_router(reviews.router, prefix="/api/v1/reviews", tags=["reviews"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(study.router, prefix="/api/v1/study", tags=["study"])
 app.include_router(finance.router, prefix="/api/v1/finance", tags=["finance"])
+app.include_router(stats.router, prefix="/api/v1/stats", tags=["stats"])
 
 
 @app.api_route("/", methods=["GET", "HEAD"])
